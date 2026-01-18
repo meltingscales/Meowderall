@@ -1048,7 +1048,7 @@ viewHeader model =
                 )
             ]
         , p [ class "tagline" ] [ text "Cat medication tracking for shelters" ]
-        , p [ class "notice" ] [ text "Data is stored locally in your browser only." ]
+        , p [ class "notice" ] [ text "Data is stored locally in your browser only. Changing browsers or laptops will cause new data to appear. Use CSV import/export at bottom of page for portability." ]
         , if model.isAdmin then
             p [ class "admin-badge" ] [ text "Admin Mode" ]
 
