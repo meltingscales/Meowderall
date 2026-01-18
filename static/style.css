@@ -80,6 +80,10 @@ h1 {
     background: var(--text-light);
 }
 
+.btn-admin-toggle {
+    font-size: 0.85rem;
+}
+
 .header-actions {
     display: flex;
     gap: 0.5rem;

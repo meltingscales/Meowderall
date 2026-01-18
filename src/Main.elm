@@ -4,7 +4,7 @@ import Browser
 import Browser.Dom as Dom
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onClick, onInput, stopPropagationOn)
+import Html.Events exposing (onClick, onInput, stopPropagationOn, on, keyCode)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Task
@@ -296,6 +296,7 @@ type Msg
     | AddDayAfter
     | RemoveFirstDay
     | RemoveLastDay
+    | RequestAdminLogin
     | RequestPinEntry EditingCell String
     | PinDigit String
     | PinBackspace
@@ -477,6 +478,16 @@ update msg model =
                     updateActiveForm removeLastDay model
             in
             ( newModel, saveFormData (encodeAppData newModel) )
+
+        RequestAdminLogin ->
+            ( { model
+                | showPinModal = True
+                , pinInput = ""
+                , pinError = False
+                , pendingEdit = Nothing
+              }
+            , Cmd.none
+            )
 
         RequestPinEntry editingCell currentValue ->
             ( { model
@@ -868,10 +879,10 @@ viewHeader isAdmin =
         [ div [ class "header-top" ]
             [ h1 [] [ text "Meowderall" ]
             , if isAdmin then
-                button [ class "btn btn-small btn-logout", onClick Logout ] [ text "Logout" ]
+                button [ class "btn btn-small btn-admin-toggle btn-logout", onClick Logout ] [ text "Logout Admin" ]
 
               else
-                text ""
+                button [ class "btn btn-small btn-admin-toggle", onClick RequestAdminLogin ] [ text "Admin Login" ]
             ]
         , p [ class "tagline" ] [ text "Cat medication tracking for shelters" ]
         , p [ class "notice" ] [ text "Data is stored locally in your browser only." ]
@@ -1135,6 +1146,7 @@ viewEditModal model =
                         , class "modal-input"
                         , Html.Attributes.value model.editValue
                         , onInput UpdateEditValue
+                        , onEnter SaveEdit
                         , placeholder ("Enter " ++ String.toLower fieldLabel)
                         , id "edit-input"
                         ]
@@ -1251,3 +1263,18 @@ viewDeleteConfirmModal model =
 onClickStopPropagation : msg -> Attribute msg
 onClickStopPropagation msg =
     stopPropagationOn "click" (Decode.succeed ( msg, True ))
+
+
+onEnter : msg -> Attribute msg
+onEnter msg =
+    on "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen
+                (\key ->
+                    if key == "Enter" then
+                        Decode.succeed msg
+
+                    else
+                        Decode.fail "not enter"
+                )
+        )
