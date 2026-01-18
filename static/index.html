@@ -15,6 +15,7 @@
         // Load data from localStorage
         var isAdmin = localStorage.getItem('meowderall_admin') === 'true';
         var formDataStr = localStorage.getItem('meowderall_form');
+        var adminPin = localStorage.getItem('meowderall_pin');
         var formData = null;
 
         if (formDataStr) {
@@ -29,7 +30,8 @@
             node: document.getElementById('app'),
             flags: {
                 isAdmin: isAdmin,
-                formData: formData
+                formData: formData,
+                adminPin: adminPin
             }
         });
 
@@ -41,6 +43,33 @@
         // Save form data
         app.ports.saveFormData.subscribe(function(formData) {
             localStorage.setItem('meowderall_form', JSON.stringify(formData));
+        });
+
+        // Save admin PIN
+        app.ports.saveAdminPin.subscribe(function(pin) {
+            localStorage.setItem('meowderall_pin', pin);
+        });
+
+        // Trigger CSV import file picker
+        app.ports.triggerCsvImport.subscribe(function() {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = function(e) {
+                var file = e.target.files[0];
+                if (file) {
+                    var reader = new FileReader();
+                    reader.onload = function(event) {
+                        var csvContent = event.target.result;
+                        var formData = parseCsvToForm(csvContent);
+                        if (formData) {
+                            app.ports.csvImported.send(formData);
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
         });
 
         // Download CSV
@@ -166,6 +195,139 @@
                       .replace(/</g, '&lt;')
                       .replace(/>/g, '&gt;')
                       .replace(/"/g, '&quot;');
+        }
+
+        function parseCsvToForm(csvContent) {
+            var lines = csvContent.split('\n').map(function(line) {
+                return line.trim();
+            }).filter(function(line) {
+                return line.length > 0;
+            });
+
+            var form = {
+                id: 0,  // Will be assigned by Elm
+                catName: '',
+                diagnosis: '',
+                treatment: '',
+                careContact: '',
+                vetInfo: '',
+                startDate: '',
+                endDate: '',
+                dailyRecords: []
+            };
+
+            var inDailyRecords = false;
+
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var values = parseCsvLine(line);
+
+                if (values.length === 0) continue;
+
+                // Check if this is the daily records header
+                if (values[0] === 'Date' || values[0].toLowerCase() === 'date') {
+                    inDailyRecords = true;
+                    continue;
+                }
+
+                if (inDailyRecords) {
+                    // Parse daily record: Date, A.M. Initials, P.M. Initials, Comments
+                    if (values.length >= 1) {
+                        var dateStr = parseDisplayDate(values[0]);
+                        form.dailyRecords.push({
+                            date: dateStr,
+                            amInitials: values[1] || '',
+                            pmInitials: values[2] || '',
+                            comments: values[3] || ''
+                        });
+                    }
+                } else {
+                    // Parse header fields (key-value pairs)
+                    var key = values[0].toLowerCase().replace(/[^a-z]/g, '');
+                    var value = values[1] || '';
+
+                    if (key === 'catname') form.catName = value;
+                    else if (key === 'diagnosis') form.diagnosis = value;
+                    else if (key === 'treatment') form.treatment = value;
+                    else if (key === 'carecontact') form.careContact = value;
+                    else if (key === 'vethospital') form.vetInfo = value;
+                    else if (key === 'startdate') form.startDate = value;
+                    else if (key === 'enddate') form.endDate = value;
+                }
+            }
+
+            // Infer start/end dates from daily records if not set
+            if (form.dailyRecords.length > 0) {
+                if (!form.startDate) {
+                    form.startDate = form.dailyRecords[0].date;
+                }
+                if (!form.endDate) {
+                    form.endDate = form.dailyRecords[form.dailyRecords.length - 1].date;
+                }
+            }
+
+            return form;
+        }
+
+        function parseCsvLine(line) {
+            var values = [];
+            var current = '';
+            var inQuotes = false;
+
+            for (var i = 0; i < line.length; i++) {
+                var char = line[i];
+                var nextChar = line[i + 1];
+
+                if (inQuotes) {
+                    if (char === '"' && nextChar === '"') {
+                        // Escaped quote
+                        current += '"';
+                        i++;
+                    } else if (char === '"') {
+                        // End of quoted field
+                        inQuotes = false;
+                    } else {
+                        current += char;
+                    }
+                } else {
+                    if (char === '"') {
+                        inQuotes = true;
+                    } else if (char === ',') {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+            }
+            values.push(current.trim());
+            return values;
+        }
+
+        function parseDisplayDate(dateStr) {
+            // Handle MM/DD format (convert to YYYY-MM-DD using current year)
+            var mmddMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})$/);
+            if (mmddMatch) {
+                var year = new Date().getFullYear();
+                var month = mmddMatch[1].padStart(2, '0');
+                var day = mmddMatch[2].padStart(2, '0');
+                return year + '-' + month + '-' + day;
+            }
+
+            // Handle YYYY-MM-DD format (already correct)
+            var isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (isoMatch) {
+                return dateStr;
+            }
+
+            // Handle MM/DD/YYYY format
+            var usMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (usMatch) {
+                return usMatch[3] + '-' + usMatch[1].padStart(2, '0') + '-' + usMatch[2].padStart(2, '0');
+            }
+
+            // Return as-is if no pattern matched
+            return dateStr;
         }
     </script>
 </body>

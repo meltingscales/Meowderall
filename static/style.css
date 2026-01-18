@@ -84,9 +84,56 @@ h1 {
     font-size: 0.85rem;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .header-actions {
     display: flex;
     gap: 0.5rem;
+}
+
+.pin-warning {
+    display: inline-block;
+    background: var(--warning);
+    color: #fff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.pin-input-group {
+    margin-bottom: 1rem;
+}
+
+.pin-input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text-light);
+}
+
+.pin-text-input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1.5rem;
+    text-align: center;
+    letter-spacing: 0.5rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+}
+
+.pin-text-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.change-pin-modal {
+    max-width: 320px;
 }
 
 /* Date inputs */

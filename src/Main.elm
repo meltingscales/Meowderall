@@ -2,6 +2,7 @@ port module Main exposing (main)
 
 import Browser
 import Browser.Dom as Dom
+import Browser.Events
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput, stopPropagationOn, on, keyCode)
@@ -26,6 +27,12 @@ port downloadCsv : Encode.Value -> Cmd msg
 
 
 port downloadPdf : Encode.Value -> Cmd msg
+
+
+port triggerCsvImport : () -> Cmd msg
+
+
+port csvImported : (Decode.Value -> msg) -> Sub msg
 
 
 port loadAdminSession : (Bool -> msg) -> Sub msg
@@ -86,8 +93,63 @@ initWithFlags flags =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    loadAdminSession LoadAdminSession
+subscriptions model =
+    Sub.batch
+        [ loadAdminSession LoadAdminSession
+        , csvImported CsvImported
+        , if model.showPinModal then
+            Browser.Events.onKeyDown keyDecoder
+
+          else
+            Sub.none
+        ]
+
+
+keyDecoder : Decode.Decoder Msg
+keyDecoder =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\key ->
+                case key of
+                    "0" ->
+                        Decode.succeed (PinDigit "0")
+
+                    "1" ->
+                        Decode.succeed (PinDigit "1")
+
+                    "2" ->
+                        Decode.succeed (PinDigit "2")
+
+                    "3" ->
+                        Decode.succeed (PinDigit "3")
+
+                    "4" ->
+                        Decode.succeed (PinDigit "4")
+
+                    "5" ->
+                        Decode.succeed (PinDigit "5")
+
+                    "6" ->
+                        Decode.succeed (PinDigit "6")
+
+                    "7" ->
+                        Decode.succeed (PinDigit "7")
+
+                    "8" ->
+                        Decode.succeed (PinDigit "8")
+
+                    "9" ->
+                        Decode.succeed (PinDigit "9")
+
+                    "Backspace" ->
+                        Decode.succeed PinBackspace
+
+                    "Escape" ->
+                        Decode.succeed CancelPin
+
+                    _ ->
+                        Decode.fail "not a pin key"
+            )
 
 
 
@@ -327,6 +389,8 @@ type Msg
     | LoadAdminSession Bool
     | ExportCsv
     | ExportPdf
+    | ImportCsv
+    | CsvImported Decode.Value
 
 
 type FormField
@@ -554,7 +618,7 @@ update msg model =
             ( { model | pinInput = "", pinError = False }, Cmd.none )
 
         SubmitPin ->
-            if model.pinInput == adminPin then
+            if model.pinInput == model.adminPin then
                 ( { model
                     | isAdmin = True
                     , showPinModal = False
@@ -603,6 +667,68 @@ update msg model =
                     ( model, downloadPdf (encodeForm form) )
 
                 Nothing ->
+                    ( model, Cmd.none )
+
+        ShowChangePinModal ->
+            ( { model | showChangePinModal = True, newPinInput = "", confirmPinInput = "", changePinError = "" }, Cmd.none )
+
+        UpdateNewPin value ->
+            let
+                digitsOnly =
+                    String.filter Char.isDigit value
+                        |> String.left 4
+            in
+            ( { model | newPinInput = digitsOnly }, Cmd.none )
+
+        UpdateConfirmPin value ->
+            let
+                digitsOnly =
+                    String.filter Char.isDigit value
+                        |> String.left 4
+            in
+            ( { model | confirmPinInput = digitsOnly }, Cmd.none )
+
+        SaveNewPin ->
+            if String.length model.newPinInput /= 4 then
+                ( { model | changePinError = "PIN must be 4 digits" }, Cmd.none )
+
+            else if model.newPinInput /= model.confirmPinInput then
+                ( { model | changePinError = "PINs do not match" }, Cmd.none )
+
+            else
+                ( { model
+                    | adminPin = model.newPinInput
+                    , showChangePinModal = False
+                    , newPinInput = ""
+                    , confirmPinInput = ""
+                    , changePinError = ""
+                  }
+                , saveAdminPin model.newPinInput
+                )
+
+        CancelChangePin ->
+            ( { model | showChangePinModal = False, newPinInput = "", confirmPinInput = "", changePinError = "" }, Cmd.none )
+
+        ImportCsv ->
+            ( model, triggerCsvImport () )
+
+        CsvImported jsonValue ->
+            case Decode.decodeValue formDecoder jsonValue of
+                Ok importedForm ->
+                    let
+                        newForm =
+                            { importedForm | id = model.nextFormId }
+
+                        newModel =
+                            { model
+                                | forms = model.forms ++ [ newForm ]
+                                , activeFormIndex = List.length model.forms
+                                , nextFormId = model.nextFormId + 1
+                            }
+                    in
+                    ( newModel, saveFormData (encodeAppData newModel) )
+
+                Err _ ->
                     ( model, Cmd.none )
 
 
@@ -874,7 +1000,7 @@ generateDateRange start end =
 view : Model -> Html Msg
 view model =
     div [ class "app" ]
-        [ viewHeader model.isAdmin
+        [ viewHeader model
         , viewTabBar model
         , case getActiveForm model of
             Just form ->
@@ -888,25 +1014,46 @@ view model =
                 p [] [ text "No form selected" ]
         , viewEditModal model
         , viewPinModal model
+        , viewChangePinModal model
         , viewDeleteConfirmModal model
         ]
 
 
-viewHeader : Bool -> Html Msg
-viewHeader isAdmin =
+viewHeader : Model -> Html Msg
+viewHeader model =
+    let
+        isDefaultPin =
+            model.adminPin == defaultPin
+    in
     header [ class "header" ]
         [ div [ class "header-top" ]
             [ h1 [] [ text "Meowderall" ]
-            , if isAdmin then
-                button [ class "btn btn-small btn-admin-toggle btn-logout", onClick Logout ] [ text "Logout Admin" ]
+            , div [ class "header-buttons" ]
+                (if model.isAdmin then
+                    -- Admin is logged in: can change PIN and logout
+                    [ button [ class "btn btn-small", onClick ShowChangePinModal ] [ text "Change PIN" ]
+                    , button [ class "btn btn-small btn-admin-toggle btn-logout", onClick Logout ] [ text "Logout from Admin" ]
+                    ]
 
-              else
-                button [ class "btn btn-small btn-admin-toggle", onClick RequestAdminLogin ] [ text "Admin Login" ]
+                 else if isDefaultPin then
+                    -- PIN not yet set: anyone can set it (one-time setup)
+                    [ button [ class "btn btn-small btn-admin-toggle", onClick ShowChangePinModal ] [ text "Set PIN" ]
+                    , button [ class "btn btn-small btn-admin-toggle", onClick RequestAdminLogin ] [ text "Admin Login" ]
+                    ]
+
+                 else
+                    -- PIN is set, user not logged in: can only login
+                    [ button [ class "btn btn-small btn-admin-toggle", onClick RequestAdminLogin ] [ text "Admin Login" ]
+                    ]
+                )
             ]
         , p [ class "tagline" ] [ text "Cat medication tracking for shelters" ]
         , p [ class "notice" ] [ text "Data is stored locally in your browser only." ]
-        , if isAdmin then
+        , if model.isAdmin then
             p [ class "admin-badge" ] [ text "Admin Mode" ]
+
+          else if isDefaultPin then
+            p [ class "pin-warning" ] [ text "Default PIN (1234) - please set a custom PIN" ]
 
           else
             text ""
@@ -1132,7 +1279,8 @@ viewTappableCell date field value isEditing hasAccess =
 viewExportButtons : Html Msg
 viewExportButtons =
     div [ class "export-section" ]
-        [ button [ class "btn btn-export", onClick ExportCsv ] [ text "Download CSV" ]
+        [ button [ class "btn btn-export", onClick ImportCsv ] [ text "Import CSV" ]
+        , button [ class "btn btn-export", onClick ExportCsv ] [ text "Download CSV" ]
         , button [ class "btn btn-export", onClick ExportPdf ] [ text "Download PDF" ]
         ]
 
@@ -1230,6 +1378,79 @@ viewPinModal model =
                     ]
                 , div [ class "modal-buttons" ]
                     [ button [ class "btn btn-secondary", onClick CancelPin ] [ text "Cancel" ]
+                    ]
+                ]
+            ]
+
+    else
+        text ""
+
+
+viewChangePinModal : Model -> Html Msg
+viewChangePinModal model =
+    if model.showChangePinModal then
+        let
+            isSettingNew =
+                model.adminPin == defaultPin
+
+            title =
+                if isSettingNew then
+                    "Set Admin PIN"
+
+                else
+                    "Change Admin PIN"
+        in
+        div [ class "modal-overlay", onClick CancelChangePin ]
+            [ div
+                [ class "modal change-pin-modal"
+                , onClickStopPropagation NoOp
+                ]
+                [ h2 [] [ text title ]
+                , p [ class "pin-subtitle" ]
+                    [ text
+                        (if isSettingNew then
+                            "Choose a 4-digit PIN for admin access"
+
+                         else
+                            "Enter a new 4-digit PIN"
+                        )
+                    ]
+                , div [ class "pin-input-group" ]
+                    [ Html.label [] [ text "New PIN" ]
+                    , input
+                        [ type_ "password"
+                        , class "pin-text-input"
+                        , Html.Attributes.value model.newPinInput
+                        , onInput UpdateNewPin
+                        , placeholder "****"
+                        , Html.Attributes.maxlength 4
+                        , Html.Attributes.pattern "[0-9]*"
+                        , Html.Attributes.attribute "inputmode" "numeric"
+                        ]
+                        []
+                    ]
+                , div [ class "pin-input-group" ]
+                    [ Html.label [] [ text "Confirm PIN" ]
+                    , input
+                        [ type_ "password"
+                        , class "pin-text-input"
+                        , Html.Attributes.value model.confirmPinInput
+                        , onInput UpdateConfirmPin
+                        , placeholder "****"
+                        , Html.Attributes.maxlength 4
+                        , Html.Attributes.pattern "[0-9]*"
+                        , Html.Attributes.attribute "inputmode" "numeric"
+                        ]
+                        []
+                    ]
+                , if String.isEmpty model.changePinError then
+                    text ""
+
+                  else
+                    p [ class "pin-error" ] [ text model.changePinError ]
+                , div [ class "modal-buttons" ]
+                    [ button [ class "btn btn-secondary", onClick CancelChangePin ] [ text "Cancel" ]
+                    , button [ class "btn btn-primary", onClick SaveNewPin ] [ text "Save PIN" ]
                     ]
                 ]
             ]
