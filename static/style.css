@@ -80,6 +80,50 @@ h1 {
     background: var(--text-light);
 }
 
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Date inputs */
+.date-inputs {
+    grid-column: span 2;
+}
+
+.date-input-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.date-input {
+    flex: 1;
+    min-width: 140px;
+}
+
+/* Export section */
+.export-section {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.btn-export {
+    flex: 1;
+    min-width: 140px;
+    background: var(--primary-dark);
+}
+
+/* Empty state message */
+.empty-message {
+    text-align: center;
+    color: var(--text-light);
+    padding: 2rem;
+    font-style: italic;
+}
+
 .notice {
     background: var(--warning);
     color: #fff;

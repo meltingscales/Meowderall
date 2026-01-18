@@ -6,6 +6,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput, stopPropagationOn)
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Task
 
 
@@ -15,10 +16,25 @@ import Task
 port saveAdminSession : Bool -> Cmd msg
 
 
+port saveFormData : Encode.Value -> Cmd msg
+
+
+port downloadCsv : Encode.Value -> Cmd msg
+
+
+port downloadPdf : Encode.Value -> Cmd msg
+
+
 port loadAdminSession : (Bool -> msg) -> Sub msg
 
 
-main : Program Bool Model Msg
+type alias Flags =
+    { isAdmin : Bool
+    , formData : Maybe Decode.Value
+    }
+
+
+main : Program Flags Model Msg
 main =
     Browser.element
         { init = initWithFlags
@@ -28,9 +44,23 @@ main =
         }
 
 
-initWithFlags : Bool -> ( Model, Cmd Msg )
-initWithFlags isAdmin =
-    ( { init | isAdmin = isAdmin }, Cmd.none )
+initWithFlags : Flags -> ( Model, Cmd Msg )
+initWithFlags flags =
+    let
+        form =
+            case flags.formData of
+                Just json ->
+                    case Decode.decodeValue formDecoder json of
+                        Ok loadedForm ->
+                            loadedForm
+
+                        Err _ ->
+                            emptyForm
+
+                Nothing ->
+                    emptyForm
+    in
+    ( { init | isAdmin = flags.isAdmin, form = form }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -93,7 +123,7 @@ adminPin =
 
 init : Model
 init =
-    { form = sampleForm
+    { form = emptyForm
     , editing = Nothing
     , editValue = ""
     , isAdmin = False
@@ -104,32 +134,16 @@ init =
     }
 
 
-sampleForm : MedicationForm
-sampleForm =
-    { catName = "Saffy P017"
-    , diagnosis = "Wound infection - elbow wound"
-    , treatment = "Clavamox 1mL 2X/day for 14 days, med in refrigerator, continue e-collar"
-    , careContact = "Green"
+emptyForm : MedicationForm
+emptyForm =
+    { catName = ""
+    , diagnosis = ""
+    , treatment = ""
+    , careContact = ""
     , vetInfo = ""
-    , startDate = "2026-01-12"
-    , endDate = "2026-01-26"
-    , dailyRecords =
-        [ { date = "2026-01-12", amInitials = "", pmInitials = "TM", comments = "Easy Peasy" }
-        , { date = "2026-01-13", amInitials = "JR", pmInitials = "QR", comments = "" }
-        , { date = "2026-01-14", amInitials = "KT", pmInitials = "KP", comments = "" }
-        , { date = "2026-01-15", amInitials = "Kolu", pmInitials = "NB", comments = "" }
-        , { date = "2026-01-16", amInitials = "CL", pmInitials = "MO", comments = "" }
-        , { date = "2026-01-17", amInitials = "KT", pmInitials = "", comments = "" }
-        , { date = "2026-01-18", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-19", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-20", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-21", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-22", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-23", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-24", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-25", amInitials = "", pmInitials = "", comments = "" }
-        , { date = "2026-01-26", amInitials = "", pmInitials = "", comments = "" }
-        ]
+    , startDate = ""
+    , endDate = ""
+    , dailyRecords = []
     }
 
 
@@ -147,6 +161,60 @@ isProtectedField field =
 
 
 
+-- JSON ENCODERS
+
+
+encodeForm : MedicationForm -> Encode.Value
+encodeForm form =
+    Encode.object
+        [ ( "catName", Encode.string form.catName )
+        , ( "diagnosis", Encode.string form.diagnosis )
+        , ( "treatment", Encode.string form.treatment )
+        , ( "careContact", Encode.string form.careContact )
+        , ( "vetInfo", Encode.string form.vetInfo )
+        , ( "startDate", Encode.string form.startDate )
+        , ( "endDate", Encode.string form.endDate )
+        , ( "dailyRecords", Encode.list encodeDailyRecord form.dailyRecords )
+        ]
+
+
+encodeDailyRecord : DailyRecord -> Encode.Value
+encodeDailyRecord record =
+    Encode.object
+        [ ( "date", Encode.string record.date )
+        , ( "amInitials", Encode.string record.amInitials )
+        , ( "pmInitials", Encode.string record.pmInitials )
+        , ( "comments", Encode.string record.comments )
+        ]
+
+
+
+-- JSON DECODERS
+
+
+formDecoder : Decode.Decoder MedicationForm
+formDecoder =
+    Decode.map8 MedicationForm
+        (Decode.field "catName" Decode.string)
+        (Decode.field "diagnosis" Decode.string)
+        (Decode.field "treatment" Decode.string)
+        (Decode.field "careContact" Decode.string)
+        (Decode.field "vetInfo" Decode.string)
+        (Decode.field "startDate" Decode.string)
+        (Decode.field "endDate" Decode.string)
+        (Decode.field "dailyRecords" (Decode.list dailyRecordDecoder))
+
+
+dailyRecordDecoder : Decode.Decoder DailyRecord
+dailyRecordDecoder =
+    Decode.map4 DailyRecord
+        (Decode.field "date" Decode.string)
+        (Decode.field "amInitials" Decode.string)
+        (Decode.field "pmInitials" Decode.string)
+        (Decode.field "comments" Decode.string)
+
+
+
 -- UPDATE
 
 
@@ -157,6 +225,9 @@ type Msg
     | SaveEdit
     | CancelEdit
     | UpdateFormField FormField String
+    | UpdateStartDate String
+    | UpdateEndDate String
+    | GenerateDates
     | RequestPinEntry EditingCell String
     | PinDigit String
     | PinBackspace
@@ -166,6 +237,9 @@ type Msg
     | Logout
     | FocusResult (Result Dom.Error ())
     | LoadAdminSession Bool
+    | ExportCsv
+    | ExportPdf
+    | NewForm
 
 
 type FormField
@@ -208,12 +282,16 @@ update msg model =
         SaveEdit ->
             case model.editing of
                 Just editingCell ->
+                    let
+                        newForm =
+                            updateDailyRecord model.form editingCell model.editValue
+                    in
                     ( { model
-                        | form = updateDailyRecord model.form editingCell model.editValue
+                        | form = newForm
                         , editing = Nothing
                         , editValue = ""
                       }
-                    , Cmd.none
+                    , saveFormData (encodeForm newForm)
                     )
 
                 Nothing ->
@@ -223,7 +301,38 @@ update msg model =
             ( { model | editing = Nothing, editValue = "" }, Cmd.none )
 
         UpdateFormField field value ->
-            ( { model | form = updateFormField model.form field value }, Cmd.none )
+            let
+                newForm =
+                    updateFormField model.form field value
+            in
+            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+
+        UpdateStartDate value ->
+            let
+                oldForm =
+                    model.form
+
+                newForm =
+                    { oldForm | startDate = value }
+            in
+            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+
+        UpdateEndDate value ->
+            let
+                oldForm =
+                    model.form
+
+                newForm =
+                    { oldForm | endDate = value }
+            in
+            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+
+        GenerateDates ->
+            let
+                newForm =
+                    generateDailyRecords model.form
+            in
+            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
 
         RequestPinEntry editingCell currentValue ->
             ( { model
@@ -243,7 +352,6 @@ update msg model =
                         model.pinInput ++ digit
                 in
                 if String.length newPin == 4 then
-                    -- Auto-submit when 4 digits entered
                     if newPin == adminPin then
                         ( { model
                             | isAdmin = True
@@ -307,6 +415,19 @@ update msg model =
         LoadAdminSession isAdmin ->
             ( { model | isAdmin = isAdmin }, Cmd.none )
 
+        ExportCsv ->
+            ( model, downloadCsv (encodeForm model.form) )
+
+        ExportPdf ->
+            ( model, downloadPdf (encodeForm model.form) )
+
+        NewForm ->
+            let
+                newForm =
+                    emptyForm
+            in
+            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+
 
 focusElement : String -> Cmd Msg
 focusElement id =
@@ -353,6 +474,107 @@ updateDailyRecord form editingCell newValue =
     { form | dailyRecords = List.map updateRecord form.dailyRecords }
 
 
+generateDailyRecords : MedicationForm -> MedicationForm
+generateDailyRecords form =
+    if String.isEmpty form.startDate || String.isEmpty form.endDate then
+        form
+
+    else
+        let
+            dates =
+                generateDateRange form.startDate form.endDate
+
+            existingByDate =
+                List.map (\r -> ( r.date, r )) form.dailyRecords
+                    |> List.foldl (\( d, r ) acc -> ( d, r ) :: acc) []
+
+            findExisting date =
+                List.filter (\( d, _ ) -> d == date) existingByDate
+                    |> List.head
+                    |> Maybe.map Tuple.second
+
+            newRecords =
+                List.map
+                    (\date ->
+                        case findExisting date of
+                            Just existing ->
+                                existing
+
+                            Nothing ->
+                                { date = date, amInitials = "", pmInitials = "", comments = "" }
+                    )
+                    dates
+        in
+        { form | dailyRecords = newRecords }
+
+
+generateDateRange : String -> String -> List String
+generateDateRange start end =
+    -- Simple date range generator (assumes YYYY-MM-DD format)
+    let
+        parseDate str =
+            case String.split "-" str of
+                [ y, m, d ] ->
+                    Maybe.map3 (\year month day -> ( year, month, day ))
+                        (String.toInt y)
+                        (String.toInt m)
+                        (String.toInt d)
+
+                _ ->
+                    Nothing
+
+        formatDateTuple ( y, m, d ) =
+            String.fromInt y
+                ++ "-"
+                ++ String.padLeft 2 '0' (String.fromInt m)
+                ++ "-"
+                ++ String.padLeft 2 '0' (String.fromInt d)
+
+        daysInMonth year month =
+            if List.member month [ 1, 3, 5, 7, 8, 10, 12 ] then
+                31
+
+            else if List.member month [ 4, 6, 9, 11 ] then
+                30
+
+            else if modBy 4 year == 0 && (modBy 100 year /= 0 || modBy 400 year == 0) then
+                29
+
+            else
+                28
+
+        nextDay ( y, m, d ) =
+            let
+                maxD =
+                    daysInMonth y m
+            in
+            if d < maxD then
+                ( y, m, d + 1 )
+
+            else if m < 12 then
+                ( y, m + 1, 1 )
+
+            else
+                ( y + 1, 1, 1 )
+
+        compareDates ( y1, m1, d1 ) ( y2, m2, d2 ) =
+            compare ( y1, m1, d1 ) ( y2, m2, d2 )
+
+        generateHelper current endDate acc =
+            if compareDates current endDate == GT then
+                List.reverse acc
+
+            else
+                generateHelper (nextDay current) endDate (formatDateTuple current :: acc)
+    in
+    case ( parseDate start, parseDate end ) of
+        ( Just s, Just e ) ->
+            generateHelper s e []
+
+        _ ->
+            []
+
+
 
 -- VIEW
 
@@ -363,6 +585,7 @@ view model =
         [ viewHeader model.isAdmin
         , viewFormInfo model.form
         , viewScheduleTable model
+        , viewExportButtons
         , viewEditModal model
         , viewPinModal model
         ]
@@ -373,11 +596,14 @@ viewHeader isAdmin =
     header [ class "header" ]
         [ div [ class "header-top" ]
             [ h1 [] [ text "Meowderall" ]
-            , if isAdmin then
-                button [ class "btn btn-small btn-logout", onClick Logout ] [ text "Logout" ]
+            , div [ class "header-actions" ]
+                [ button [ class "btn btn-small", onClick NewForm ] [ text "New Form" ]
+                , if isAdmin then
+                    button [ class "btn btn-small btn-logout", onClick Logout ] [ text "Logout" ]
 
-              else
-                text ""
+                  else
+                    text ""
+                ]
             ]
         , p [ class "tagline" ] [ text "Cat medication tracking for shelters" ]
         , p [ class "notice" ] [ text "Data is stored locally in your browser only." ]
@@ -398,7 +624,7 @@ viewFormInfo form =
             , viewEditableField "Treatment" form.treatment Treatment
             , viewEditableField "CARE Contact" form.careContact CareContact
             , viewEditableField "Vet/Hospital" form.vetInfo VetInfo
-            , viewDateRange form.startDate form.endDate
+            , viewDateInputs form.startDate form.endDate
             ]
         ]
 
@@ -417,14 +643,27 @@ viewEditableField label value field =
         ]
 
 
-viewDateRange : String -> String -> Html Msg
-viewDateRange startDate endDate =
-    div [ class "field date-range" ]
+viewDateInputs : String -> String -> Html Msg
+viewDateInputs startDate endDate =
+    div [ class "field date-inputs" ]
         [ Html.label [] [ text "Treatment Period" ]
-        , div [ class "date-display" ]
-            [ span [] [ text (formatDate startDate) ]
-            , span [ class "date-separator" ] [ text " → " ]
-            , span [] [ text (formatDate endDate) ]
+        , div [ class "date-input-row" ]
+            [ input
+                [ type_ "date"
+                , Html.Attributes.value startDate
+                , onInput UpdateStartDate
+                , class "date-input"
+                ]
+                []
+            , span [ class "date-separator" ] [ text "to" ]
+            , input
+                [ type_ "date"
+                , Html.Attributes.value endDate
+                , onInput UpdateEndDate
+                , class "date-input"
+                ]
+                []
+            , button [ class "btn btn-small", onClick GenerateDates ] [ text "Generate" ]
             ]
         ]
 
@@ -441,22 +680,29 @@ formatDate dateStr =
 
 viewScheduleTable : Model -> Html Msg
 viewScheduleTable model =
-    div [ class "card schedule-section" ]
-        [ h2 [] [ text "Daily Medication Log" ]
-        , div [ class "table-wrapper" ]
-            [ table [ class "schedule-table" ]
-                [ thead []
-                    [ tr []
-                        [ th [] [ text "Date" ]
-                        , th [ class "protected-header" ] [ text "A.M." ]
-                        , th [ class "protected-header" ] [ text "P.M." ]
-                        , th [] [ text "Comments" ]
+    if List.isEmpty model.form.dailyRecords then
+        div [ class "card schedule-section" ]
+            [ h2 [] [ text "Daily Medication Log" ]
+            , p [ class "empty-message" ] [ text "Set start and end dates above, then click \"Generate\" to create the schedule." ]
+            ]
+
+    else
+        div [ class "card schedule-section" ]
+            [ h2 [] [ text "Daily Medication Log" ]
+            , div [ class "table-wrapper" ]
+                [ table [ class "schedule-table" ]
+                    [ thead []
+                        [ tr []
+                            [ th [] [ text "Date" ]
+                            , th [ class "protected-header" ] [ text "A.M." ]
+                            , th [ class "protected-header" ] [ text "P.M." ]
+                            , th [] [ text "Comments" ]
+                            ]
                         ]
+                    , tbody [] (List.map (viewDailyRow model) model.form.dailyRecords)
                     ]
-                , tbody [] (List.map (viewDailyRow model) model.form.dailyRecords)
                 ]
             ]
-        ]
 
 
 viewDailyRow : Model -> DailyRecord -> Html Msg
@@ -512,6 +758,14 @@ viewTappableCell date field value isEditing hasAccess =
 
           else
             text ""
+        ]
+
+
+viewExportButtons : Html Msg
+viewExportButtons =
+    div [ class "export-section" ]
+        [ button [ class "btn btn-export", onClick ExportCsv ] [ text "Download CSV" ]
+        , button [ class "btn btn-export", onClick ExportPdf ] [ text "Download PDF" ]
         ]
 
 

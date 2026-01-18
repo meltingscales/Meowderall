@@ -12,18 +12,161 @@
     <div id="app"></div>
     <script src="elm.js"></script>
     <script>
-        // Load admin session from localStorage
+        // Load data from localStorage
         var isAdmin = localStorage.getItem('meowderall_admin') === 'true';
+        var formDataStr = localStorage.getItem('meowderall_form');
+        var formData = null;
+
+        if (formDataStr) {
+            try {
+                formData = JSON.parse(formDataStr);
+            } catch (e) {
+                console.error('Failed to parse form data:', e);
+            }
+        }
 
         var app = Elm.Main.init({
             node: document.getElementById('app'),
-            flags: isAdmin
+            flags: {
+                isAdmin: isAdmin,
+                formData: formData
+            }
         });
 
-        // Save admin session to localStorage
+        // Save admin session
         app.ports.saveAdminSession.subscribe(function(isAdmin) {
             localStorage.setItem('meowderall_admin', isAdmin ? 'true' : 'false');
         });
+
+        // Save form data
+        app.ports.saveFormData.subscribe(function(formData) {
+            localStorage.setItem('meowderall_form', JSON.stringify(formData));
+        });
+
+        // Download CSV
+        app.ports.downloadCsv.subscribe(function(formData) {
+            var csv = generateCsv(formData);
+            var filename = (formData.catName || 'medication') + '_' + formatDateForFilename(new Date()) + '.csv';
+            downloadFile(csv, filename, 'text/csv');
+        });
+
+        // Download PDF (generates a printable HTML that opens in new tab)
+        app.ports.downloadPdf.subscribe(function(formData) {
+            var html = generatePrintableHtml(formData);
+            var printWindow = window.open('', '_blank');
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(function() { printWindow.print(); }, 250);
+        });
+
+        function formatDateForFilename(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        function formatDateDisplay(dateStr) {
+            if (!dateStr) return '';
+            var parts = dateStr.split('-');
+            if (parts.length === 3) {
+                return parts[1] + '/' + parts[2];
+            }
+            return dateStr;
+        }
+
+        function generateCsv(form) {
+            var lines = [];
+
+            // Header info
+            lines.push('"MEDICATION FORM"');
+            lines.push('"Cat Name","' + escapeCsv(form.catName) + '"');
+            lines.push('"Diagnosis","' + escapeCsv(form.diagnosis) + '"');
+            lines.push('"Treatment","' + escapeCsv(form.treatment) + '"');
+            lines.push('"CARE Contact","' + escapeCsv(form.careContact) + '"');
+            lines.push('"Vet/Hospital","' + escapeCsv(form.vetInfo) + '"');
+            lines.push('"Start Date","' + form.startDate + '"');
+            lines.push('"End Date","' + form.endDate + '"');
+            lines.push('');
+
+            // Daily records header
+            lines.push('"Date","A.M. Initials","P.M. Initials","Comments"');
+
+            // Daily records
+            form.dailyRecords.forEach(function(record) {
+                lines.push('"' + formatDateDisplay(record.date) + '","' +
+                    escapeCsv(record.amInitials) + '","' +
+                    escapeCsv(record.pmInitials) + '","' +
+                    escapeCsv(record.comments) + '"');
+            });
+
+            return lines.join('\n');
+        }
+
+        function escapeCsv(str) {
+            if (!str) return '';
+            return str.replace(/"/g, '""');
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            var blob = new Blob([content], { type: mimeType });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function generatePrintableHtml(form) {
+            var recordRows = form.dailyRecords.map(function(r) {
+                return '<tr>' +
+                    '<td>' + formatDateDisplay(r.date) + '</td>' +
+                    '<td>' + escapeHtml(r.amInitials || '') + '</td>' +
+                    '<td>' + escapeHtml(r.pmInitials || '') + '</td>' +
+                    '<td>' + escapeHtml(r.comments || '') + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            return '<!DOCTYPE html>' +
+                '<html><head><title>Medication Form - ' + escapeHtml(form.catName) + '</title>' +
+                '<style>' +
+                'body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }' +
+                'h1 { color: #357a8a; margin-bottom: 5px; }' +
+                '.subtitle { color: #666; margin-bottom: 20px; }' +
+                '.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }' +
+                '.info-item { margin-bottom: 8px; }' +
+                '.info-label { font-weight: bold; color: #666; }' +
+                'table { width: 100%; border-collapse: collapse; margin-top: 20px; }' +
+                'th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }' +
+                'th { background: #4a90a4; color: white; }' +
+                'td:first-child { font-weight: bold; background: #f5f5f5; }' +
+                '@media print { body { padding: 0; } }' +
+                '</style></head><body>' +
+                '<h1>Medication Form</h1>' +
+                '<p class="subtitle">Meowderall - Cat Medication Tracking</p>' +
+                '<div class="info-grid">' +
+                '<div class="info-item"><span class="info-label">Cat Name:</span> ' + escapeHtml(form.catName) + '</div>' +
+                '<div class="info-item"><span class="info-label">CARE Contact:</span> ' + escapeHtml(form.careContact) + '</div>' +
+                '<div class="info-item"><span class="info-label">Diagnosis:</span> ' + escapeHtml(form.diagnosis) + '</div>' +
+                '<div class="info-item"><span class="info-label">Vet/Hospital:</span> ' + escapeHtml(form.vetInfo) + '</div>' +
+                '<div class="info-item" style="grid-column: span 2;"><span class="info-label">Treatment:</span> ' + escapeHtml(form.treatment) + '</div>' +
+                '<div class="info-item"><span class="info-label">Start Date:</span> ' + form.startDate + '</div>' +
+                '<div class="info-item"><span class="info-label">End Date:</span> ' + form.endDate + '</div>' +
+                '</div>' +
+                '<h2>Daily Medication Log</h2>' +
+                '<table><thead><tr><th>Date</th><th>A.M.</th><th>P.M.</th><th>Comments</th></tr></thead>' +
+                '<tbody>' + recordRows + '</tbody></table>' +
+                '</body></html>';
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;');
+        }
     </script>
 </body>
 </html>
