@@ -47,20 +47,32 @@ main =
 initWithFlags : Flags -> ( Model, Cmd Msg )
 initWithFlags flags =
     let
-        form =
+        appData =
             case flags.formData of
                 Just json ->
-                    case Decode.decodeValue formDecoder json of
-                        Ok loadedForm ->
-                            loadedForm
+                    case Decode.decodeValue appDataDecoder json of
+                        Ok loaded ->
+                            loaded
 
                         Err _ ->
-                            emptyForm
+                            { forms = [ emptyForm 1 ], activeIndex = 0, nextId = 2 }
 
                 Nothing ->
-                    emptyForm
+                    { forms = [ emptyForm 1 ], activeIndex = 0, nextId = 2 }
     in
-    ( { init | isAdmin = flags.isAdmin, form = form }, Cmd.none )
+    ( { forms = appData.forms
+      , activeFormIndex = appData.activeIndex
+      , nextFormId = appData.nextId
+      , editing = Nothing
+      , editValue = ""
+      , isAdmin = flags.isAdmin
+      , showPinModal = False
+      , pinInput = ""
+      , pinError = False
+      , pendingEdit = Nothing
+      }
+    , Cmd.none
+    )
 
 
 subscriptions : Model -> Sub Msg
@@ -81,7 +93,8 @@ type alias DailyRecord =
 
 
 type alias MedicationForm =
-    { catName : String
+    { id : Int
+    , catName : String
     , diagnosis : String
     , treatment : String
     , careContact : String
@@ -105,7 +118,9 @@ type CellField
 
 
 type alias Model =
-    { form : MedicationForm
+    { forms : List MedicationForm
+    , activeFormIndex : Int
+    , nextFormId : Int
     , editing : Maybe EditingCell
     , editValue : String
     , isAdmin : Bool
@@ -121,22 +136,10 @@ adminPin =
     "1234"
 
 
-init : Model
-init =
-    { form = emptyForm
-    , editing = Nothing
-    , editValue = ""
-    , isAdmin = False
-    , showPinModal = False
-    , pinInput = ""
-    , pinError = False
-    , pendingEdit = Nothing
-    }
-
-
-emptyForm : MedicationForm
-emptyForm =
-    { catName = ""
+emptyForm : Int -> MedicationForm
+emptyForm id =
+    { id = id
+    , catName = ""
     , diagnosis = ""
     , treatment = ""
     , careContact = ""
@@ -145,6 +148,28 @@ emptyForm =
     , endDate = ""
     , dailyRecords = []
     }
+
+
+getActiveForm : Model -> Maybe MedicationForm
+getActiveForm model =
+    List.head (List.drop model.activeFormIndex model.forms)
+
+
+updateActiveForm : (MedicationForm -> MedicationForm) -> Model -> Model
+updateActiveForm fn model =
+    let
+        updateAt index forms =
+            List.indexedMap
+                (\i form ->
+                    if i == index then
+                        fn form
+
+                    else
+                        form
+                )
+                forms
+    in
+    { model | forms = updateAt model.activeFormIndex model.forms }
 
 
 isProtectedField : CellField -> Bool
@@ -164,10 +189,20 @@ isProtectedField field =
 -- JSON ENCODERS
 
 
+encodeAppData : Model -> Encode.Value
+encodeAppData model =
+    Encode.object
+        [ ( "forms", Encode.list encodeForm model.forms )
+        , ( "activeIndex", Encode.int model.activeFormIndex )
+        , ( "nextId", Encode.int model.nextFormId )
+        ]
+
+
 encodeForm : MedicationForm -> Encode.Value
 encodeForm form =
     Encode.object
-        [ ( "catName", Encode.string form.catName )
+        [ ( "id", Encode.int form.id )
+        , ( "catName", Encode.string form.catName )
         , ( "diagnosis", Encode.string form.diagnosis )
         , ( "treatment", Encode.string form.treatment )
         , ( "careContact", Encode.string form.careContact )
@@ -192,17 +227,38 @@ encodeDailyRecord record =
 -- JSON DECODERS
 
 
+type alias AppData =
+    { forms : List MedicationForm
+    , activeIndex : Int
+    , nextId : Int
+    }
+
+
+appDataDecoder : Decode.Decoder AppData
+appDataDecoder =
+    Decode.map3 AppData
+        (Decode.field "forms" (Decode.list formDecoder))
+        (Decode.field "activeIndex" Decode.int)
+        (Decode.field "nextId" Decode.int)
+
+
 formDecoder : Decode.Decoder MedicationForm
 formDecoder =
-    Decode.map8 MedicationForm
-        (Decode.field "catName" Decode.string)
-        (Decode.field "diagnosis" Decode.string)
-        (Decode.field "treatment" Decode.string)
-        (Decode.field "careContact" Decode.string)
-        (Decode.field "vetInfo" Decode.string)
-        (Decode.field "startDate" Decode.string)
-        (Decode.field "endDate" Decode.string)
-        (Decode.field "dailyRecords" (Decode.list dailyRecordDecoder))
+    Decode.succeed MedicationForm
+        |> decodeAndMap (Decode.field "id" Decode.int)
+        |> decodeAndMap (Decode.field "catName" Decode.string)
+        |> decodeAndMap (Decode.field "diagnosis" Decode.string)
+        |> decodeAndMap (Decode.field "treatment" Decode.string)
+        |> decodeAndMap (Decode.field "careContact" Decode.string)
+        |> decodeAndMap (Decode.field "vetInfo" Decode.string)
+        |> decodeAndMap (Decode.field "startDate" Decode.string)
+        |> decodeAndMap (Decode.field "endDate" Decode.string)
+        |> decodeAndMap (Decode.field "dailyRecords" (Decode.list dailyRecordDecoder))
+
+
+decodeAndMap : Decode.Decoder a -> Decode.Decoder (a -> b) -> Decode.Decoder b
+decodeAndMap =
+    Decode.map2 (|>)
 
 
 dailyRecordDecoder : Decode.Decoder DailyRecord
@@ -220,6 +276,9 @@ dailyRecordDecoder =
 
 type Msg
     = NoOp
+    | SwitchTab Int
+    | AddNewForm
+    | DeleteForm Int
     | StartEdit String CellField String
     | UpdateEditValue String
     | SaveEdit
@@ -228,6 +287,10 @@ type Msg
     | UpdateStartDate String
     | UpdateEndDate String
     | GenerateDates
+    | AddDayBefore
+    | AddDayAfter
+    | RemoveFirstDay
+    | RemoveLastDay
     | RequestPinEntry EditingCell String
     | PinDigit String
     | PinBackspace
@@ -239,7 +302,6 @@ type Msg
     | LoadAdminSession Bool
     | ExportCsv
     | ExportPdf
-    | NewForm
 
 
 type FormField
@@ -255,6 +317,52 @@ update msg model =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        SwitchTab index ->
+            let
+                newModel =
+                    { model | activeFormIndex = index, editing = Nothing, editValue = "" }
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        AddNewForm ->
+            let
+                newForm =
+                    emptyForm model.nextFormId
+
+                newModel =
+                    { model
+                        | forms = model.forms ++ [ newForm ]
+                        , activeFormIndex = List.length model.forms
+                        , nextFormId = model.nextFormId + 1
+                    }
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        DeleteForm index ->
+            if List.length model.forms <= 1 then
+                -- Don't delete the last form
+                ( model, Cmd.none )
+
+            else
+                let
+                    newForms =
+                        List.take index model.forms ++ List.drop (index + 1) model.forms
+
+                    newActiveIndex =
+                        if model.activeFormIndex >= List.length newForms then
+                            List.length newForms - 1
+
+                        else if model.activeFormIndex > index then
+                            model.activeFormIndex - 1
+
+                        else
+                            model.activeFormIndex
+
+                    newModel =
+                        { model | forms = newForms, activeFormIndex = newActiveIndex }
+                in
+                ( newModel, saveFormData (encodeAppData newModel) )
 
         StartEdit date field currentValue ->
             if isProtectedField field && not model.isAdmin then
@@ -283,16 +391,11 @@ update msg model =
             case model.editing of
                 Just editingCell ->
                     let
-                        newForm =
-                            updateDailyRecord model.form editingCell model.editValue
+                        newModel =
+                            updateActiveForm (updateDailyRecord editingCell model.editValue) model
+                                |> (\m -> { m | editing = Nothing, editValue = "" })
                     in
-                    ( { model
-                        | form = newForm
-                        , editing = Nothing
-                        , editValue = ""
-                      }
-                    , saveFormData (encodeForm newForm)
-                    )
+                    ( newModel, saveFormData (encodeAppData newModel) )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -302,37 +405,59 @@ update msg model =
 
         UpdateFormField field value ->
             let
-                newForm =
-                    updateFormField model.form field value
+                newModel =
+                    updateActiveForm (updateFormField field value) model
             in
-            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+            ( newModel, saveFormData (encodeAppData newModel) )
 
         UpdateStartDate value ->
             let
-                oldForm =
-                    model.form
-
-                newForm =
-                    { oldForm | startDate = value }
+                newModel =
+                    updateActiveForm (\form -> { form | startDate = value }) model
             in
-            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+            ( newModel, saveFormData (encodeAppData newModel) )
 
         UpdateEndDate value ->
             let
-                oldForm =
-                    model.form
-
-                newForm =
-                    { oldForm | endDate = value }
+                newModel =
+                    updateActiveForm (\form -> { form | endDate = value }) model
             in
-            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+            ( newModel, saveFormData (encodeAppData newModel) )
 
         GenerateDates ->
             let
-                newForm =
-                    generateDailyRecords model.form
+                newModel =
+                    updateActiveForm generateDailyRecords model
             in
-            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        AddDayBefore ->
+            let
+                newModel =
+                    updateActiveForm addDayBefore model
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        AddDayAfter ->
+            let
+                newModel =
+                    updateActiveForm addDayAfter model
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        RemoveFirstDay ->
+            let
+                newModel =
+                    updateActiveForm removeFirstDay model
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
+
+        RemoveLastDay ->
+            let
+                newModel =
+                    updateActiveForm removeLastDay model
+            in
+            ( newModel, saveFormData (encodeAppData newModel) )
 
         RequestPinEntry editingCell currentValue ->
             ( { model
@@ -416,17 +541,20 @@ update msg model =
             ( { model | isAdmin = isAdmin }, Cmd.none )
 
         ExportCsv ->
-            ( model, downloadCsv (encodeForm model.form) )
+            case getActiveForm model of
+                Just form ->
+                    ( model, downloadCsv (encodeForm form) )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         ExportPdf ->
-            ( model, downloadPdf (encodeForm model.form) )
+            case getActiveForm model of
+                Just form ->
+                    ( model, downloadPdf (encodeForm form) )
 
-        NewForm ->
-            let
-                newForm =
-                    emptyForm
-            in
-            ( { model | form = newForm }, saveFormData (encodeForm newForm) )
+                Nothing ->
+                    ( model, Cmd.none )
 
 
 focusElement : String -> Cmd Msg
@@ -434,8 +562,8 @@ focusElement id =
     Task.attempt FocusResult (Dom.focus id)
 
 
-updateFormField : MedicationForm -> FormField -> String -> MedicationForm
-updateFormField form field value =
+updateFormField : FormField -> String -> MedicationForm -> MedicationForm
+updateFormField field value form =
     case field of
         CatName ->
             { form | catName = value }
@@ -453,8 +581,8 @@ updateFormField form field value =
             { form | vetInfo = value }
 
 
-updateDailyRecord : MedicationForm -> EditingCell -> String -> MedicationForm
-updateDailyRecord form editingCell newValue =
+updateDailyRecord : EditingCell -> String -> MedicationForm -> MedicationForm
+updateDailyRecord editingCell newValue form =
     let
         updateRecord record =
             if record.date == editingCell.date then
@@ -472,6 +600,153 @@ updateDailyRecord form editingCell newValue =
                 record
     in
     { form | dailyRecords = List.map updateRecord form.dailyRecords }
+
+
+addDayBefore : MedicationForm -> MedicationForm
+addDayBefore form =
+    case List.head form.dailyRecords of
+        Just firstRecord ->
+            let
+                prevDate =
+                    getPreviousDay firstRecord.date
+
+                newRecord =
+                    { date = prevDate, amInitials = "", pmInitials = "", comments = "" }
+            in
+            { form
+                | dailyRecords = newRecord :: form.dailyRecords
+                , startDate = prevDate
+            }
+
+        Nothing ->
+            form
+
+
+addDayAfter : MedicationForm -> MedicationForm
+addDayAfter form =
+    case List.reverse form.dailyRecords |> List.head of
+        Just lastRecord ->
+            let
+                nextDate =
+                    getNextDay lastRecord.date
+
+                newRecord =
+                    { date = nextDate, amInitials = "", pmInitials = "", comments = "" }
+            in
+            { form
+                | dailyRecords = form.dailyRecords ++ [ newRecord ]
+                , endDate = nextDate
+            }
+
+        Nothing ->
+            form
+
+
+removeFirstDay : MedicationForm -> MedicationForm
+removeFirstDay form =
+    case form.dailyRecords of
+        _ :: rest ->
+            { form
+                | dailyRecords = rest
+                , startDate =
+                    List.head rest
+                        |> Maybe.map .date
+                        |> Maybe.withDefault form.startDate
+            }
+
+        [] ->
+            form
+
+
+removeLastDay : MedicationForm -> MedicationForm
+removeLastDay form =
+    let
+        newRecords =
+            List.take (List.length form.dailyRecords - 1) form.dailyRecords
+    in
+    { form
+        | dailyRecords = newRecords
+        , endDate =
+            List.reverse newRecords
+                |> List.head
+                |> Maybe.map .date
+                |> Maybe.withDefault form.endDate
+    }
+
+
+getPreviousDay : String -> String
+getPreviousDay dateStr =
+    case parseDate dateStr of
+        Just ( y, m, d ) ->
+            if d > 1 then
+                formatDateTuple ( y, m, d - 1 )
+
+            else if m > 1 then
+                formatDateTuple ( y, m - 1, daysInMonth y (m - 1) )
+
+            else
+                formatDateTuple ( y - 1, 12, 31 )
+
+        Nothing ->
+            dateStr
+
+
+getNextDay : String -> String
+getNextDay dateStr =
+    case parseDate dateStr of
+        Just ( y, m, d ) ->
+            let
+                maxD =
+                    daysInMonth y m
+            in
+            if d < maxD then
+                formatDateTuple ( y, m, d + 1 )
+
+            else if m < 12 then
+                formatDateTuple ( y, m + 1, 1 )
+
+            else
+                formatDateTuple ( y + 1, 1, 1 )
+
+        Nothing ->
+            dateStr
+
+
+parseDate : String -> Maybe ( Int, Int, Int )
+parseDate str =
+    case String.split "-" str of
+        [ y, m, d ] ->
+            Maybe.map3 (\year month day -> ( year, month, day ))
+                (String.toInt y)
+                (String.toInt m)
+                (String.toInt d)
+
+        _ ->
+            Nothing
+
+
+formatDateTuple : ( Int, Int, Int ) -> String
+formatDateTuple ( y, m, d ) =
+    String.fromInt y
+        ++ "-"
+        ++ String.padLeft 2 '0' (String.fromInt m)
+        ++ "-"
+        ++ String.padLeft 2 '0' (String.fromInt d)
+
+
+daysInMonth : Int -> Int -> Int
+daysInMonth year month =
+    if List.member month [ 1, 3, 5, 7, 8, 10, 12 ] then
+        31
+
+    else if List.member month [ 4, 6, 9, 11 ] then
+        30
+
+    else if modBy 4 year == 0 && (modBy 100 year /= 0 || modBy 400 year == 0) then
+        29
+
+    else
+        28
 
 
 generateDailyRecords : MedicationForm -> MedicationForm
@@ -510,40 +785,8 @@ generateDailyRecords form =
 
 generateDateRange : String -> String -> List String
 generateDateRange start end =
-    -- Simple date range generator (assumes YYYY-MM-DD format)
     let
-        parseDate str =
-            case String.split "-" str of
-                [ y, m, d ] ->
-                    Maybe.map3 (\year month day -> ( year, month, day ))
-                        (String.toInt y)
-                        (String.toInt m)
-                        (String.toInt d)
-
-                _ ->
-                    Nothing
-
-        formatDateTuple ( y, m, d ) =
-            String.fromInt y
-                ++ "-"
-                ++ String.padLeft 2 '0' (String.fromInt m)
-                ++ "-"
-                ++ String.padLeft 2 '0' (String.fromInt d)
-
-        daysInMonth year month =
-            if List.member month [ 1, 3, 5, 7, 8, 10, 12 ] then
-                31
-
-            else if List.member month [ 4, 6, 9, 11 ] then
-                30
-
-            else if modBy 4 year == 0 && (modBy 100 year /= 0 || modBy 400 year == 0) then
-                29
-
-            else
-                28
-
-        nextDay ( y, m, d ) =
+        nextDayTuple ( y, m, d ) =
             let
                 maxD =
                     daysInMonth y m
@@ -565,7 +808,7 @@ generateDateRange start end =
                 List.reverse acc
 
             else
-                generateHelper (nextDay current) endDate (formatDateTuple current :: acc)
+                generateHelper (nextDayTuple current) endDate (formatDateTuple current :: acc)
     in
     case ( parseDate start, parseDate end ) of
         ( Just s, Just e ) ->
@@ -583,9 +826,17 @@ view : Model -> Html Msg
 view model =
     div [ class "app" ]
         [ viewHeader model.isAdmin
-        , viewFormInfo model.form
-        , viewScheduleTable model
-        , viewExportButtons
+        , viewTabBar model
+        , case getActiveForm model of
+            Just form ->
+                div []
+                    [ viewFormInfo form
+                    , viewScheduleTable model form
+                    , viewExportButtons
+                    ]
+
+            Nothing ->
+                p [] [ text "No form selected" ]
         , viewEditModal model
         , viewPinModal model
         ]
@@ -596,19 +847,61 @@ viewHeader isAdmin =
     header [ class "header" ]
         [ div [ class "header-top" ]
             [ h1 [] [ text "Meowderall" ]
-            , div [ class "header-actions" ]
-                [ button [ class "btn btn-small", onClick NewForm ] [ text "New Form" ]
-                , if isAdmin then
-                    button [ class "btn btn-small btn-logout", onClick Logout ] [ text "Logout" ]
+            , if isAdmin then
+                button [ class "btn btn-small btn-logout", onClick Logout ] [ text "Logout" ]
 
-                  else
-                    text ""
-                ]
+              else
+                text ""
             ]
         , p [ class "tagline" ] [ text "Cat medication tracking for shelters" ]
         , p [ class "notice" ] [ text "Data is stored locally in your browser only." ]
         , if isAdmin then
             p [ class "admin-badge" ] [ text "Admin Mode" ]
+
+          else
+            text ""
+        ]
+
+
+viewTabBar : Model -> Html Msg
+viewTabBar model =
+    div [ class "tab-bar" ]
+        [ div [ class "tabs" ]
+            (List.indexedMap (viewTab model.activeFormIndex (List.length model.forms > 1)) model.forms
+                ++ [ button [ class "tab tab-add", onClick AddNewForm ] [ text "+" ] ]
+            )
+        ]
+
+
+viewTab : Int -> Bool -> Int -> MedicationForm -> Html Msg
+viewTab activeIndex canDelete index form =
+    let
+        tabName =
+            if String.isEmpty form.catName then
+                "Cat " ++ String.fromInt form.id
+
+            else
+                form.catName
+
+        isActive =
+            index == activeIndex
+    in
+    div
+        [ class
+            (if isActive then
+                "tab active"
+
+             else
+                "tab"
+            )
+        ]
+        [ span [ class "tab-name", onClick (SwitchTab index) ] [ text tabName ]
+        , if canDelete && isActive then
+            button
+                [ class "tab-close"
+                , onClick (DeleteForm index)
+                ]
+                [ text "×" ]
 
           else
             text ""
@@ -678,9 +971,9 @@ formatDate dateStr =
             dateStr
 
 
-viewScheduleTable : Model -> Html Msg
-viewScheduleTable model =
-    if List.isEmpty model.form.dailyRecords then
+viewScheduleTable : Model -> MedicationForm -> Html Msg
+viewScheduleTable model form =
+    if List.isEmpty form.dailyRecords then
         div [ class "card schedule-section" ]
             [ h2 [] [ text "Daily Medication Log" ]
             , p [ class "empty-message" ] [ text "Set start and end dates above, then click \"Generate\" to create the schedule." ]
@@ -689,6 +982,7 @@ viewScheduleTable model =
     else
         div [ class "card schedule-section" ]
             [ h2 [] [ text "Daily Medication Log" ]
+            , viewDayControls True
             , div [ class "table-wrapper" ]
                 [ table [ class "schedule-table" ]
                     [ thead []
@@ -699,10 +993,53 @@ viewScheduleTable model =
                             , th [] [ text "Comments" ]
                             ]
                         ]
-                    , tbody [] (List.map (viewDailyRow model) model.form.dailyRecords)
+                    , tbody [] (List.map (viewDailyRow model) form.dailyRecords)
                     ]
                 ]
+            , viewDayControls False
             ]
+
+
+viewDayControls : Bool -> Html Msg
+viewDayControls isTop =
+    div [ class "day-controls" ]
+        [ button
+            [ class "btn btn-small btn-day"
+            , onClick
+                (if isTop then
+                    AddDayBefore
+
+                 else
+                    RemoveLastDay
+                )
+            ]
+            [ text
+                (if isTop then
+                    "+ Add day before"
+
+                 else
+                    "− Remove last day"
+                )
+            ]
+        , button
+            [ class "btn btn-small btn-day"
+            , onClick
+                (if isTop then
+                    RemoveFirstDay
+
+                 else
+                    AddDayAfter
+                )
+            ]
+            [ text
+                (if isTop then
+                    "− Remove first day"
+
+                 else
+                    "+ Add day after"
+                )
+            ]
+        ]
 
 
 viewDailyRow : Model -> DailyRecord -> Html Msg
