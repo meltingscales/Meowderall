@@ -46,10 +46,38 @@ h1 {
     color: var(--primary-dark);
 }
 
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
 .tagline {
     font-size: 1.1rem;
     color: var(--text-light);
-    margin: 0 0 1rem 0;
+    margin: 0 0 0.5rem 0;
+}
+
+.admin-badge {
+    display: inline-block;
+    background: var(--success);
+    color: #fff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-small {
+    min-height: 36px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.btn-logout {
+    background: var(--text-light);
 }
 
 .notice {
@@ -120,6 +148,52 @@ textarea:focus {
     color: var(--text-light);
 }
 
+/* Form grid layout */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+@media (min-width: 600px) {
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Date range display */
+.date-range .date-display {
+    min-height: var(--min-tap);
+    padding: 0.75rem 1rem;
+    background: var(--bg);
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.date-separator {
+    color: var(--text-light);
+}
+
+/* Section headers */
+.schedule-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.25rem;
+    color: var(--primary-dark);
+}
+
+/* Table wrapper for horizontal scroll on small screens */
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Date cell in table */
+.date-cell {
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--bg) !important;
+}
+
 /* Medication schedule table */
 .schedule-table {
     width: 100%;
@@ -159,6 +233,22 @@ textarea:focus {
     font-weight: 600;
 }
 
+.schedule-table td.locked {
+    position: relative;
+}
+
+.lock-icon {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 0.7rem;
+    opacity: 0.5;
+}
+
+.protected-header {
+    position: relative;
+}
+
 /* PIN pad */
 .pin-pad {
     display: grid;
@@ -172,6 +262,60 @@ textarea:focus {
     height: 64px;
     font-size: 1.5rem;
     font-weight: 600;
+}
+
+.pin-btn {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.pin-btn:active {
+    background: var(--border);
+}
+
+.pin-clear, .pin-back {
+    background: var(--border);
+    color: var(--text-light);
+}
+
+.pin-modal {
+    max-width: 320px;
+}
+
+.pin-subtitle {
+    text-align: center;
+    color: var(--text-light);
+    margin: 0 0 1rem 0;
+    font-size: 0.9rem;
+}
+
+.pin-display {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.pin-dots {
+    display: inline-flex;
+    gap: 1rem;
+}
+
+.pin-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.15s;
+}
+
+.pin-dot.filled {
+    background: var(--primary);
+}
+
+.pin-error {
+    text-align: center;
+    color: #d32f2f;
+    font-size: 0.9rem;
+    margin: 0 0 0.5rem 0;
 }
 
 /* Modal overlay */
@@ -197,8 +341,45 @@ textarea:focus {
 }
 
 .modal h2 {
-    margin: 0 0 1rem 0;
+    margin: 0 0 0.5rem 0;
     text-align: center;
+}
+
+.modal-date {
+    text-align: center;
+    color: var(--text-light);
+    margin: 0 0 1rem 0;
+}
+
+.modal-input {
+    margin-bottom: 1rem;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.modal-buttons button {
+    flex: 1;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+
+.btn-primary:active {
+    background: var(--primary-dark);
+}
+
+.btn-secondary {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.btn-secondary:active {
+    background: var(--border);
 }
 
 /* Responsive adjustments */

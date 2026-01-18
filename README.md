@@ -20,3 +20,10 @@ SPA web app
 5. SPA web app. use elm lang please.
 6. use a `justfile` w/ `just` for storing useful commands :)
 7. extremely simple deploy to gcp. please copy ~/Git/drakonix.systems in terms of justfile structure/deploy steps w/ gcloud cli.
+
+### addtl' notes.
+
+use this repo (see ~/Git) as an example of website feel, FAQs, etc.
+
+https://github.com/meltingscales/CAREShelterDonationDataAggregation
+

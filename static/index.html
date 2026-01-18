@@ -12,8 +12,17 @@
     <div id="app"></div>
     <script src="elm.js"></script>
     <script>
+        // Load admin session from localStorage
+        var isAdmin = localStorage.getItem('meowderall_admin') === 'true';
+
         var app = Elm.Main.init({
-            node: document.getElementById('app')
+            node: document.getElementById('app'),
+            flags: isAdmin
+        });
+
+        // Save admin session to localStorage
+        app.ports.saveAdminSession.subscribe(function(isAdmin) {
+            localStorage.setItem('meowderall_admin', isAdmin ? 'true' : 'false');
         });
     </script>
 </body>
