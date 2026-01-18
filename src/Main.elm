@@ -70,6 +70,7 @@ initWithFlags flags =
       , pinInput = ""
       , pinError = False
       , pendingEdit = Nothing
+      , confirmDelete = Nothing
       }
     , Cmd.none
     )
@@ -128,6 +129,7 @@ type alias Model =
     , pinInput : String
     , pinError : Bool
     , pendingEdit : Maybe EditingCell
+    , confirmDelete : Maybe Int
     }
 
 
@@ -278,6 +280,9 @@ type Msg
     = NoOp
     | SwitchTab Int
     | AddNewForm
+    | RequestDeleteForm Int
+    | ConfirmDeleteForm
+    | CancelDeleteForm
     | DeleteForm Int
     | StartEdit String CellField String
     | UpdateEditValue String
@@ -338,6 +343,20 @@ update msg model =
                     }
             in
             ( newModel, saveFormData (encodeAppData newModel) )
+
+        RequestDeleteForm index ->
+            ( { model | confirmDelete = Just index }, Cmd.none )
+
+        ConfirmDeleteForm ->
+            case model.confirmDelete of
+                Just index ->
+                    update (DeleteForm index) { model | confirmDelete = Nothing }
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        CancelDeleteForm ->
+            ( { model | confirmDelete = Nothing }, Cmd.none )
 
         DeleteForm index ->
             if List.length model.forms <= 1 then
@@ -839,6 +858,7 @@ view model =
                 p [] [ text "No form selected" ]
         , viewEditModal model
         , viewPinModal model
+        , viewDeleteConfirmModal model
         ]
 
 
@@ -899,7 +919,7 @@ viewTab activeIndex canDelete index form =
         , if canDelete && isActive then
             button
                 [ class "tab-close"
-                , onClick (DeleteForm index)
+                , onClick (RequestDeleteForm index)
                 ]
                 [ text "×" ]
 
@@ -1003,43 +1023,24 @@ viewScheduleTable model form =
 viewDayControls : Bool -> Html Msg
 viewDayControls isTop =
     div [ class "day-controls" ]
-        [ button
-            [ class "btn btn-small btn-day"
-            , onClick
-                (if isTop then
-                    AddDayBefore
-
-                 else
-                    RemoveLastDay
-                )
+        (if isTop then
+            [ button
+                [ class "btn btn-small btn-day", onClick AddDayBefore ]
+                [ text "+ Add day before" ]
+            , button
+                [ class "btn btn-small btn-day btn-danger", onClick RemoveFirstDay ]
+                [ text "− Remove first day" ]
             ]
-            [ text
-                (if isTop then
-                    "+ Add day before"
 
-                 else
-                    "− Remove last day"
-                )
+         else
+            [ button
+                [ class "btn btn-small btn-day btn-danger", onClick RemoveLastDay ]
+                [ text "− Remove last day" ]
+            , button
+                [ class "btn btn-small btn-day", onClick AddDayAfter ]
+                [ text "+ Add day after" ]
             ]
-        , button
-            [ class "btn btn-small btn-day"
-            , onClick
-                (if isTop then
-                    RemoveFirstDay
-
-                 else
-                    AddDayAfter
-                )
-            ]
-            [ text
-                (if isTop then
-                    "− Remove first day"
-
-                 else
-                    "+ Add day after"
-                )
-            ]
-        ]
+        )
 
 
 viewDailyRow : Model -> DailyRecord -> Html Msg
@@ -1204,6 +1205,47 @@ viewPinModal model =
 
     else
         text ""
+
+
+viewDeleteConfirmModal : Model -> Html Msg
+viewDeleteConfirmModal model =
+    case model.confirmDelete of
+        Just index ->
+            let
+                catName =
+                    List.drop index model.forms
+                        |> List.head
+                        |> Maybe.map
+                            (\form ->
+                                if String.isEmpty form.catName then
+                                    "Cat " ++ String.fromInt form.id
+
+                                else
+                                    form.catName
+                            )
+                        |> Maybe.withDefault "this cat"
+            in
+            div [ class "modal-overlay", onClick CancelDeleteForm ]
+                [ div
+                    [ class "modal delete-modal"
+                    , onClickStopPropagation NoOp
+                    ]
+                    [ h2 [] [ text "Delete Form?" ]
+                    , p [ class "delete-message" ]
+                        [ text "OK to delete '"
+                        , strong [] [ text catName ]
+                        , text "' form?"
+                        ]
+                    , p [ class "delete-warning" ] [ text "This cannot be undone." ]
+                    , div [ class "modal-buttons" ]
+                        [ button [ class "btn btn-secondary", onClick CancelDeleteForm ] [ text "Cancel" ]
+                        , button [ class "btn btn-delete", onClick ConfirmDeleteForm ] [ text "Yes, Delete" ]
+                        ]
+                    ]
+                ]
+
+        Nothing ->
+            text ""
 
 
 onClickStopPropagation : msg -> Attribute msg

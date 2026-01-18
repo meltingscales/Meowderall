@@ -177,7 +177,7 @@ h1 {
 .tab-close {
     background: transparent;
     border: none;
-    color: var(--text-light);
+    color: #d32f2f;
     font-size: 1.25rem;
     padding: 0;
     min-width: 24px;
@@ -186,8 +186,8 @@ h1 {
     cursor: pointer;
 }
 
-.tab-close:hover {
-    color: #d32f2f;
+.tab-close:active {
+    color: #b71c1c;
 }
 
 /* Day controls */
@@ -206,6 +206,41 @@ h1 {
 
 .btn-day:active {
     background: var(--border);
+}
+
+.btn-day.btn-danger {
+    background: #ffebee;
+    color: #d32f2f;
+    border-color: #ffcdd2;
+}
+
+.btn-day.btn-danger:active {
+    background: #ffcdd2;
+}
+
+/* Delete confirmation modal */
+.delete-modal {
+    text-align: center;
+}
+
+.delete-message {
+    font-size: 1.1rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.delete-warning {
+    color: var(--text-light);
+    font-size: 0.9rem;
+    margin: 0 0 1.5rem 0;
+}
+
+.btn-delete {
+    background: #d32f2f;
+    color: #fff;
+}
+
+.btn-delete:active {
+    background: #b71c1c;
 }
 
 .notice {
