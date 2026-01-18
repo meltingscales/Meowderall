@@ -19,6 +19,9 @@ port saveAdminSession : Bool -> Cmd msg
 port saveFormData : Encode.Value -> Cmd msg
 
 
+port saveAdminPin : String -> Cmd msg
+
+
 port downloadCsv : Encode.Value -> Cmd msg
 
 
@@ -31,6 +34,7 @@ port loadAdminSession : (Bool -> msg) -> Sub msg
 type alias Flags =
     { isAdmin : Bool
     , formData : Maybe Decode.Value
+    , adminPin : Maybe String
     }
 
 
@@ -66,11 +70,16 @@ initWithFlags flags =
       , editing = Nothing
       , editValue = ""
       , isAdmin = flags.isAdmin
+      , adminPin = Maybe.withDefault defaultPin flags.adminPin
       , showPinModal = False
       , pinInput = ""
       , pinError = False
       , pendingEdit = Nothing
       , confirmDelete = Nothing
+      , showChangePinModal = False
+      , newPinInput = ""
+      , confirmPinInput = ""
+      , changePinError = ""
       }
     , Cmd.none
     )
@@ -125,16 +134,21 @@ type alias Model =
     , editing : Maybe EditingCell
     , editValue : String
     , isAdmin : Bool
+    , adminPin : String
     , showPinModal : Bool
     , pinInput : String
     , pinError : Bool
     , pendingEdit : Maybe EditingCell
     , confirmDelete : Maybe Int
+    , showChangePinModal : Bool
+    , newPinInput : String
+    , confirmPinInput : String
+    , changePinError : String
     }
 
 
-adminPin : String
-adminPin =
+defaultPin : String
+defaultPin =
     "1234"
 
 
@@ -304,6 +318,11 @@ type Msg
     | SubmitPin
     | CancelPin
     | Logout
+    | ShowChangePinModal
+    | UpdateNewPin String
+    | UpdateConfirmPin String
+    | SaveNewPin
+    | CancelChangePin
     | FocusResult (Result Dom.Error ())
     | LoadAdminSession Bool
     | ExportCsv
@@ -507,7 +526,7 @@ update msg model =
                         model.pinInput ++ digit
                 in
                 if String.length newPin == 4 then
-                    if newPin == adminPin then
+                    if newPin == model.adminPin then
                         ( { model
                             | isAdmin = True
                             , showPinModal = False
