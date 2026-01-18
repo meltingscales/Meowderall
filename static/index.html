@@ -75,7 +75,7 @@
         // Download CSV
         app.ports.downloadCsv.subscribe(function(formData) {
             var csv = generateCsv(formData);
-            var filename = (formData.catName || 'medication') + '_' + formatDateForFilename(new Date()) + '.csv';
+            var filename = 'meowderall-' + (formData.catName || 'medication') + '_' + formatDateForFilename(new Date()) + '.csv';
             downloadFile(csv, filename, 'text/csv');
         });
 
