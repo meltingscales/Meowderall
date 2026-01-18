@@ -1282,6 +1282,10 @@ viewExportButtons =
         [ button [ class "btn btn-export", onClick ImportCsv ] [ text "Import CSV" ]
         , button [ class "btn btn-export", onClick ExportCsv ] [ text "Download CSV" ]
         , button [ class "btn btn-export", onClick ExportPdf ] [ text "Download PDF" ]
+        , p [ class "github-link" ]
+            [ a [ href "https://github.com/meltingscales/Meowderall", target "_blank" ]
+                [ text "View on GitHub" ]
+            ]
         ]
 
 

@@ -167,6 +167,22 @@ h1 {
     background: var(--primary-dark);
 }
 
+.github-link {
+    width: 100%;
+    text-align: center;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.github-link a {
+    color: var(--text-light);
+    text-decoration: none;
+}
+
+.github-link a:hover {
+    text-decoration: underline;
+}
+
 /* Empty state message */
 .empty-message {
     text-align: center;
