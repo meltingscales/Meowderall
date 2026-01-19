@@ -87,6 +87,7 @@ initWithFlags flags =
       , newPinInput = ""
       , confirmPinInput = ""
       , changePinError = ""
+      , currentPage = MedicationFormsPage
       }
     , Cmd.none
     )
@@ -173,6 +174,7 @@ type alias MedicationForm =
     , vetInfo : String
     , startDate : String
     , endDate : String
+    , room : String
     , dailyRecords : List DailyRecord
     }
 
@@ -187,6 +189,13 @@ type CellField
     = AMInitials
     | PMInitials
     | Comments
+
+
+type Page
+    = MedicationFormsPage
+    | MedicalBoardPage
+    | RoomBreakdownPage
+    | ConstantsPage
 
 
 type alias Model =
@@ -206,12 +215,18 @@ type alias Model =
     , newPinInput : String
     , confirmPinInput : String
     , changePinError : String
+    , currentPage : Page
     }
 
 
 defaultPin : String
 defaultPin =
     "1234"
+
+
+defaultRoomOptions : List String
+defaultRoomOptions =
+    [ "", "004", "006", "010", "012", "Intake", "ISO", "Hallway", "Soc Room" ]
 
 
 emptyForm : Int -> MedicationForm
@@ -224,6 +239,7 @@ emptyForm id =
     , vetInfo = ""
     , startDate = ""
     , endDate = ""
+    , room = ""
     , dailyRecords = []
     }
 
@@ -287,6 +303,7 @@ encodeForm form =
         , ( "vetInfo", Encode.string form.vetInfo )
         , ( "startDate", Encode.string form.startDate )
         , ( "endDate", Encode.string form.endDate )
+        , ( "room", Encode.string form.room )
         , ( "dailyRecords", Encode.list encodeDailyRecord form.dailyRecords )
         ]
 
@@ -331,7 +348,16 @@ formDecoder =
         |> decodeAndMap (Decode.field "vetInfo" Decode.string)
         |> decodeAndMap (Decode.field "startDate" Decode.string)
         |> decodeAndMap (Decode.field "endDate" Decode.string)
+        |> decodeAndMap (optionalField "room" Decode.string "")
         |> decodeAndMap (Decode.field "dailyRecords" (Decode.list dailyRecordDecoder))
+
+
+optionalField : String -> Decode.Decoder a -> a -> Decode.Decoder a
+optionalField fieldName decoder default =
+    Decode.oneOf
+        [ Decode.field fieldName decoder
+        , Decode.succeed default
+        ]
 
 
 decodeAndMap : Decode.Decoder a -> Decode.Decoder (a -> b) -> Decode.Decoder b
@@ -354,6 +380,7 @@ dailyRecordDecoder =
 
 type Msg
     = NoOp
+    | SwitchPage Page
     | SwitchTab Int
     | AddNewForm
     | RequestDeleteForm Int
@@ -391,6 +418,7 @@ type Msg
     | ExportPdf
     | ImportCsv
     | CsvImported Decode.Value
+    | GoToForm Int
 
 
 type FormField
@@ -399,6 +427,7 @@ type FormField
     | Treatment
     | CareContact
     | VetInfo
+    | Room
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -406,6 +435,9 @@ update msg model =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        SwitchPage page ->
+            ( { model | currentPage = page }, Cmd.none )
 
         SwitchTab index ->
             let
@@ -731,6 +763,16 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        GoToForm index ->
+            ( { model
+                | currentPage = MedicationFormsPage
+                , activeFormIndex = index
+                , editing = Nothing
+                , editValue = ""
+              }
+            , Cmd.none
+            )
+
 
 focusElement : String -> Cmd Msg
 focusElement id =
@@ -754,6 +796,9 @@ updateFormField field value form =
 
         VetInfo ->
             { form | vetInfo = value }
+
+        Room ->
+            { form | room = value }
 
 
 updateDailyRecord : EditingCell -> String -> MedicationForm -> MedicationForm
@@ -1001,7 +1046,35 @@ view : Model -> Html Msg
 view model =
     div [ class "app" ]
         [ viewHeader model
-        , viewTabBar model
+        , viewNavbar model
+        , viewCurrentPage model
+        , viewEditModal model
+        , viewPinModal model
+        , viewChangePinModal model
+        , viewDeleteConfirmModal model
+        ]
+
+
+viewCurrentPage : Model -> Html Msg
+viewCurrentPage model =
+    case model.currentPage of
+        MedicationFormsPage ->
+            viewMedicationFormsPage model
+
+        MedicalBoardPage ->
+            viewMedicalBoardPage model
+
+        RoomBreakdownPage ->
+            viewRoomBreakdownPage model
+
+        ConstantsPage ->
+            viewConstantsPage model
+
+
+viewMedicationFormsPage : Model -> Html Msg
+viewMedicationFormsPage model =
+    div []
+        [ viewTabBar model
         , case getActiveForm model of
             Just form ->
                 div []
@@ -1012,10 +1085,237 @@ view model =
 
             Nothing ->
                 p [] [ text "No form selected" ]
-        , viewEditModal model
-        , viewPinModal model
-        , viewChangePinModal model
-        , viewDeleteConfirmModal model
+        ]
+
+
+viewMedicalBoardPage : Model -> Html Msg
+viewMedicalBoardPage model =
+    div [ class "card medical-board" ]
+        [ h2 [] [ text "Medical Board" ]
+        , p [ class "board-subtitle" ] [ text "Click on a row to go to that cat's form" ]
+        , if List.isEmpty model.forms then
+            p [ class "empty-message" ] [ text "No cats registered yet." ]
+
+          else
+            div [ class "table-wrapper" ]
+                [ table [ class "medical-board-table" ]
+                    [ thead []
+                        [ tr []
+                            [ th [] [ text "Room" ]
+                            , th [] [ text "Name" ]
+                            , th [] [ text "AM" ]
+                            , th [] [ text "PM" ]
+                            , th [] [ text "Diagnosis" ]
+                            , th [] [ text "Treatment" ]
+                            , th [] [ text "End Date" ]
+                            ]
+                        ]
+                    , tbody []
+                        (List.indexedMap viewMedicalBoardRow model.forms)
+                    ]
+                ]
+        ]
+
+
+viewMedicalBoardRow : Int -> MedicationForm -> Html Msg
+viewMedicalBoardRow index form =
+    let
+        todayRecord =
+            List.head form.dailyRecords
+
+        ( amStatus, pmStatus ) =
+            case todayRecord of
+                Just record ->
+                    ( if String.isEmpty record.amInitials then
+                        "—"
+
+                      else
+                        record.amInitials
+                    , if String.isEmpty record.pmInitials then
+                        "—"
+
+                      else
+                        record.pmInitials
+                    )
+
+                Nothing ->
+                    ( "—", "—" )
+
+        catName =
+            if String.isEmpty form.catName then
+                "Cat " ++ String.fromInt form.id
+
+            else
+                form.catName
+    in
+    tr
+        [ class "clickable-row"
+        , onClick (GoToForm index)
+        ]
+        [ td [] [ text (if String.isEmpty form.room then "—" else form.room) ]
+        , td [] [ text catName ]
+        , td [ class (if amStatus /= "—" then "filled" else "") ] [ text amStatus ]
+        , td [ class (if pmStatus /= "—" then "filled" else "") ] [ text pmStatus ]
+        , td [] [ text (if String.isEmpty form.diagnosis then "—" else form.diagnosis) ]
+        , td [] [ text (if String.isEmpty form.treatment then "—" else form.treatment) ]
+        , td [] [ text (if String.isEmpty form.endDate then "—" else formatDate form.endDate) ]
+        ]
+
+
+viewRoomBreakdownPage : Model -> Html Msg
+viewRoomBreakdownPage model =
+    let
+        groupedByRoom =
+            groupFormsByRoom model.forms
+
+        roomOrder =
+            List.filter (\r -> not (String.isEmpty r)) defaultRoomOptions
+
+        sortedRooms =
+            List.filterMap
+                (\room ->
+                    case List.filter (\( r, _ ) -> r == room) groupedByRoom of
+                        ( _, cats ) :: _ ->
+                            Just ( room, cats )
+
+                        [] ->
+                            Nothing
+                )
+                roomOrder
+
+        unassigned =
+            List.filter (\form -> String.isEmpty form.room) model.forms
+    in
+    div [ class "room-breakdown" ]
+        ([ h2 [] [ text "Room Breakdown" ] ]
+            ++ (if List.isEmpty model.forms then
+                    [ p [ class "empty-message" ] [ text "No cats registered yet." ] ]
+
+                else
+                    (List.map viewRoomSection sortedRooms
+                        ++ (if List.isEmpty unassigned then
+                                []
+
+                            else
+                                [ viewRoomSection ( "Unassigned", unassigned ) ]
+                           )
+                    )
+               )
+        )
+
+
+groupFormsByRoom : List MedicationForm -> List ( String, List MedicationForm )
+groupFormsByRoom forms =
+    let
+        addToGroup form groups =
+            let
+                room =
+                    if String.isEmpty form.room then
+                        "Unassigned"
+
+                    else
+                        form.room
+
+                updateGroup found acc =
+                    case acc of
+                        [] ->
+                            if found then
+                                []
+
+                            else
+                                [ ( room, [ form ] ) ]
+
+                        ( r, cats ) :: rest ->
+                            if r == room then
+                                ( r, cats ++ [ form ] ) :: rest
+
+                            else
+                                ( r, cats ) :: updateGroup found rest
+            in
+            case List.filter (\( r, _ ) -> r == room) groups of
+                [] ->
+                    groups ++ [ ( room, [ form ] ) ]
+
+                _ ->
+                    updateGroup False groups
+    in
+    List.foldl addToGroup [] forms
+
+
+viewRoomSection : ( String, List MedicationForm ) -> Html Msg
+viewRoomSection ( room, cats ) =
+    div [ class "room-section card" ]
+        [ h3 [ class "room-header" ] [ text room ]
+        , ul [ class "cat-list" ]
+            (List.map viewRoomCatItem cats)
+        ]
+
+
+viewRoomCatItem : MedicationForm -> Html Msg
+viewRoomCatItem form =
+    let
+        catName =
+            if String.isEmpty form.catName then
+                "Cat " ++ String.fromInt form.id
+
+            else
+                form.catName
+
+        notes =
+            [ if String.isEmpty form.diagnosis then
+                Nothing
+
+              else
+                Just form.diagnosis
+            , if String.isEmpty form.treatment then
+                Nothing
+
+              else
+                Just form.treatment
+            ]
+                |> List.filterMap identity
+                |> String.join " | "
+    in
+    li [ class "cat-list-item" ]
+        [ span [ class "cat-name" ] [ text catName ]
+        , if String.isEmpty notes then
+            text ""
+
+          else
+            span [ class "cat-notes" ] [ text notes ]
+        ]
+
+
+viewConstantsPage : Model -> Html Msg
+viewConstantsPage model =
+    div [ class "card constants-page" ]
+        [ h2 [] [ text "Settings" ]
+        , if model.isAdmin then
+            div []
+                [ p [ class "settings-info" ] [ text "Room options are currently predefined. Future versions will allow editing." ]
+                , h3 [] [ text "Room Options" ]
+                , ul [ class "constants-list" ]
+                    (List.map
+                        (\room ->
+                            li [ class "constants-item" ]
+                                [ text
+                                    (if String.isEmpty room then
+                                        "(empty - Select Room)"
+
+                                     else
+                                        room
+                                    )
+                                ]
+                        )
+                        defaultRoomOptions
+                    )
+                ]
+
+          else
+            div [ class "admin-required" ]
+                [ p [] [ text "Admin access required to view settings." ]
+                , button [ class "btn btn-primary", onClick RequestAdminLogin ] [ text "Admin Login" ]
+                ]
         ]
 
 
@@ -1057,6 +1357,56 @@ viewHeader model =
 
           else
             text ""
+        ]
+
+
+viewNavbar : Model -> Html Msg
+viewNavbar model =
+    nav [ class "navbar" ]
+        [ button
+            [ class
+                (if model.currentPage == MedicationFormsPage then
+                    "nav-item active"
+
+                 else
+                    "nav-item"
+                )
+            , onClick (SwitchPage MedicationFormsPage)
+            ]
+            [ text "Med Forms" ]
+        , button
+            [ class
+                (if model.currentPage == MedicalBoardPage then
+                    "nav-item active"
+
+                 else
+                    "nav-item"
+                )
+            , onClick (SwitchPage MedicalBoardPage)
+            ]
+            [ text "Medical Board" ]
+        , button
+            [ class
+                (if model.currentPage == RoomBreakdownPage then
+                    "nav-item active"
+
+                 else
+                    "nav-item"
+                )
+            , onClick (SwitchPage RoomBreakdownPage)
+            ]
+            [ text "Room Breakdown" ]
+        , button
+            [ class
+                (if model.currentPage == ConstantsPage then
+                    "nav-item active"
+
+                 else
+                    "nav-item"
+                )
+            , onClick (SwitchPage ConstantsPage)
+            ]
+            [ text "Settings" ]
         ]
 
 
@@ -1110,12 +1460,41 @@ viewFormInfo form =
     div [ class "card form-info" ]
         [ div [ class "form-grid" ]
             [ viewEditableField "Cat Name" form.catName CatName
+            , viewRoomDropdown form.room
             , viewEditableField "Diagnosis" form.diagnosis Diagnosis
             , viewEditableField "Treatment" form.treatment Treatment
             , viewEditableField "CARE Contact" form.careContact CareContact
             , viewEditableField "Vet/Hospital" form.vetInfo VetInfo
             , viewDateInputs form.startDate form.endDate
             ]
+        ]
+
+
+viewRoomDropdown : String -> Html Msg
+viewRoomDropdown currentRoom =
+    div [ class "field" ]
+        [ Html.label [] [ text "Room" ]
+        , Html.select
+            [ onInput (UpdateFormField Room)
+            , Html.Attributes.value currentRoom
+            ]
+            (List.map
+                (\room ->
+                    Html.option
+                        [ Html.Attributes.value room
+                        , Html.Attributes.selected (room == currentRoom)
+                        ]
+                        [ text
+                            (if String.isEmpty room then
+                                "-- Select Room --"
+
+                             else
+                                room
+                            )
+                        ]
+                )
+                defaultRoomOptions
+            )
         ]
 
 

@@ -628,3 +628,209 @@ textarea:focus {
         padding: 2rem;
     }
 }
+
+/* Navbar */
+.navbar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    background: var(--card-bg);
+    padding: 0.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.nav-item {
+    flex: 1;
+    min-width: max-content;
+    padding: 0.75rem 1rem;
+    background: var(--bg);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover {
+    background: var(--border);
+}
+
+.nav-item.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.nav-item.active:hover {
+    background: var(--primary-dark);
+}
+
+/* Room dropdown */
+select {
+    min-height: var(--min-tap);
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    width: 100%;
+    font-size: 16px;
+    touch-action: manipulation;
+    cursor: pointer;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* Medical Board Page */
+.medical-board h2 {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-dark);
+}
+
+.board-subtitle {
+    color: var(--text-light);
+    font-size: 0.9rem;
+    margin: 0 0 1rem 0;
+}
+
+.medical-board-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.medical-board-table th,
+.medical-board-table td {
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    border: 1px solid var(--border);
+}
+
+.medical-board-table th {
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.medical-board-table td {
+    background: var(--card-bg);
+    font-size: 0.9rem;
+}
+
+.medical-board-table td.filled {
+    background: #e8f5e9;
+    font-weight: 600;
+}
+
+.clickable-row {
+    cursor: pointer;
+}
+
+.clickable-row:hover td {
+    background: var(--bg);
+}
+
+.clickable-row:hover td.filled {
+    background: #c8e6c9;
+}
+
+/* Room Breakdown Page */
+.room-breakdown {
+    padding: 0.5rem;
+}
+
+.room-breakdown h2 {
+    margin: 0 0 1rem 0;
+    color: var(--primary-dark);
+}
+
+.room-section {
+    margin-bottom: 1rem;
+}
+
+.room-header {
+    margin: 0 0 0.75rem 0;
+    color: var(--primary-dark);
+    font-size: 1.1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary);
+}
+
+.cat-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cat-list-item {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.cat-list-item:last-child {
+    border-bottom: none;
+}
+
+.cat-name {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.cat-notes {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-top: 0.25rem;
+}
+
+/* Constants/Settings Page */
+.constants-page h2 {
+    margin: 0 0 1rem 0;
+    color: var(--primary-dark);
+}
+
+.constants-page h3 {
+    margin: 1rem 0 0.5rem 0;
+    color: var(--text);
+    font-size: 1rem;
+}
+
+.settings-info {
+    color: var(--text-light);
+    font-size: 0.9rem;
+    margin: 0 0 1rem 0;
+    padding: 0.75rem;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.constants-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.constants-item {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.admin-required {
+    text-align: center;
+    padding: 2rem;
+}
+
+.admin-required p {
+    color: var(--text-light);
+    margin: 0 0 1rem 0;
+}

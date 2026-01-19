@@ -13,7 +13,7 @@ build-release:
 # Run development server (requires python3)
 dev:
     just build
-    cd static && python3 -m http.server 8080
+    cd static && python3 -m http.server 8081
 
 # Format Elm code (requires elm-format)
 fmt:

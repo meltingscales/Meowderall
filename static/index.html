@@ -108,6 +108,7 @@
             // Header info
             lines.push('"MEDICATION FORM"');
             lines.push('"Cat Name","' + escapeCsv(form.catName) + '"');
+            lines.push('"Room","' + escapeCsv(form.room || '') + '"');
             lines.push('"Diagnosis","' + escapeCsv(form.diagnosis) + '"');
             lines.push('"Treatment","' + escapeCsv(form.treatment) + '"');
             lines.push('"CARE Contact","' + escapeCsv(form.careContact) + '"');
@@ -176,6 +177,7 @@
                 '<p class="subtitle">Meowderall - Cat Medication Tracking</p>' +
                 '<div class="info-grid">' +
                 '<div class="info-item"><span class="info-label">Cat Name:</span> ' + escapeHtml(form.catName) + '</div>' +
+                '<div class="info-item"><span class="info-label">Room:</span> ' + escapeHtml(form.room || '') + '</div>' +
                 '<div class="info-item"><span class="info-label">CARE Contact:</span> ' + escapeHtml(form.careContact) + '</div>' +
                 '<div class="info-item"><span class="info-label">Diagnosis:</span> ' + escapeHtml(form.diagnosis) + '</div>' +
                 '<div class="info-item"><span class="info-label">Vet/Hospital:</span> ' + escapeHtml(form.vetInfo) + '</div>' +
@@ -213,6 +215,7 @@
                 vetInfo: '',
                 startDate: '',
                 endDate: '',
+                room: '',
                 dailyRecords: []
             };
 
@@ -247,6 +250,7 @@
                     var value = values[1] || '';
 
                     if (key === 'catname') form.catName = value;
+                    else if (key === 'room') form.room = value;
                     else if (key === 'diagnosis') form.diagnosis = value;
                     else if (key === 'treatment') form.treatment = value;
                     else if (key === 'carecontact') form.careContact = value;
