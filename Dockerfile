@@ -1,22 +1,8 @@
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-# Install elm
-COPY package*.json ./
-RUN npm ci
-
-# Copy source and build
-COPY elm.json ./
-COPY src/ ./src/
-RUN npx elm make src/Main.elm --optimize --output=elm.js
-
-# Production image
+# Simple production image - Elm is built locally before docker build
 FROM nginx:alpine
 
-# Copy static files
+# Copy pre-built static files (elm.js is already in static/ from local build)
 COPY static/ /usr/share/nginx/html/
-COPY --from=builder /app/elm.js /usr/share/nginx/html/
 
 EXPOSE 80
 
