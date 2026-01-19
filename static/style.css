@@ -834,3 +834,50 @@ select:focus {
     color: var(--text-light);
     margin: 0 0 1rem 0;
 }
+
+/* Editable room list */
+.constants-item.editable {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+}
+
+.room-name {
+    flex: 1;
+}
+
+.remove-room-btn {
+    padding: 0.25rem 0.75rem;
+    min-height: 32px;
+    min-width: auto;
+    font-size: 0.8rem;
+    background: #ffebee;
+    color: #d32f2f;
+    border: 1px solid #ffcdd2;
+}
+
+.remove-room-btn:hover {
+    background: #ffcdd2;
+}
+
+.add-room-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.add-room-form input {
+    flex: 1;
+}
+
+.add-room-form button {
+    white-space: nowrap;
+}
+
+.reset-section {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}

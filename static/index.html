@@ -16,7 +16,9 @@
         var isAdmin = localStorage.getItem('meowderall_admin') === 'true';
         var formDataStr = localStorage.getItem('meowderall_form');
         var adminPin = localStorage.getItem('meowderall_pin');
+        var constantsStr = localStorage.getItem('meowderall_constants');
         var formData = null;
+        var constants = null;
 
         if (formDataStr) {
             try {
@@ -26,12 +28,21 @@
             }
         }
 
+        if (constantsStr) {
+            try {
+                constants = JSON.parse(constantsStr);
+            } catch (e) {
+                console.error('Failed to parse constants:', e);
+            }
+        }
+
         var app = Elm.Main.init({
             node: document.getElementById('app'),
             flags: {
                 isAdmin: isAdmin,
                 formData: formData,
-                adminPin: adminPin
+                adminPin: adminPin,
+                constants: constants
             }
         });
 
@@ -48,6 +59,11 @@
         // Save admin PIN
         app.ports.saveAdminPin.subscribe(function(pin) {
             localStorage.setItem('meowderall_pin', pin);
+        });
+
+        // Save constants
+        app.ports.saveConstants.subscribe(function(constants) {
+            localStorage.setItem('meowderall_constants', JSON.stringify(constants));
         });
 
         // Trigger CSV import file picker

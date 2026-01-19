@@ -38,10 +38,14 @@ port csvImported : (Decode.Value -> msg) -> Sub msg
 port loadAdminSession : (Bool -> msg) -> Sub msg
 
 
+port saveConstants : Encode.Value -> Cmd msg
+
+
 type alias Flags =
     { isAdmin : Bool
     , formData : Maybe Decode.Value
     , adminPin : Maybe String
+    , constants : Maybe Decode.Value
     }
 
 
@@ -70,6 +74,19 @@ initWithFlags flags =
 
                 Nothing ->
                     { forms = [ emptyForm 1 ], activeIndex = 0, nextId = 2 }
+
+        loadedConstants =
+            case flags.constants of
+                Just json ->
+                    case Decode.decodeValue constantsDecoder json of
+                        Ok c ->
+                            c
+
+                        Err _ ->
+                            defaultConstants
+
+                Nothing ->
+                    defaultConstants
     in
     ( { forms = appData.forms
       , activeFormIndex = appData.activeIndex
@@ -88,6 +105,8 @@ initWithFlags flags =
       , confirmPinInput = ""
       , changePinError = ""
       , currentPage = MedicationFormsPage
+      , constants = loadedConstants
+      , newRoomInput = ""
       }
     , Cmd.none
     )
@@ -198,6 +217,11 @@ type Page
     | ConstantsPage
 
 
+type alias Constants =
+    { rooms : List String
+    }
+
+
 type alias Model =
     { forms : List MedicationForm
     , activeFormIndex : Int
@@ -216,12 +240,20 @@ type alias Model =
     , confirmPinInput : String
     , changePinError : String
     , currentPage : Page
+    , constants : Constants
+    , newRoomInput : String
     }
 
 
 defaultPin : String
 defaultPin =
     "1234"
+
+
+defaultConstants : Constants
+defaultConstants =
+    { rooms = [ "004", "006", "010", "012", "Intake", "ISO", "Hallway", "Soc Room" ]
+    }
 
 
 defaultRoomOptions : List String
@@ -374,6 +406,19 @@ dailyRecordDecoder =
         (Decode.field "comments" Decode.string)
 
 
+constantsDecoder : Decode.Decoder Constants
+constantsDecoder =
+    Decode.map Constants
+        (Decode.field "rooms" (Decode.list Decode.string))
+
+
+encodeConstants : Constants -> Encode.Value
+encodeConstants constants =
+    Encode.object
+        [ ( "rooms", Encode.list Encode.string constants.rooms )
+        ]
+
+
 
 -- UPDATE
 
@@ -419,6 +464,10 @@ type Msg
     | ImportCsv
     | CsvImported Decode.Value
     | GoToForm Int
+    | UpdateNewRoomInput String
+    | AddRoom
+    | RemoveRoom Int
+    | ResetRoomsToDefault
 
 
 type FormField
@@ -773,6 +822,53 @@ update msg model =
             , Cmd.none
             )
 
+        UpdateNewRoomInput value ->
+            ( { model | newRoomInput = value }, Cmd.none )
+
+        AddRoom ->
+            if String.isEmpty (String.trim model.newRoomInput) then
+                ( model, Cmd.none )
+
+            else
+                let
+                    newRoom =
+                        String.trim model.newRoomInput
+
+                    currentRooms =
+                        model.constants.rooms
+
+                    newConstants =
+                        { rooms = currentRooms ++ [ newRoom ] }
+
+                    newModel =
+                        { model
+                            | constants = newConstants
+                            , newRoomInput = ""
+                        }
+                in
+                ( newModel, saveConstants (encodeConstants newConstants) )
+
+        RemoveRoom index ->
+            let
+                currentRooms =
+                    model.constants.rooms
+
+                newRooms =
+                    List.take index currentRooms ++ List.drop (index + 1) currentRooms
+
+                newConstants =
+                    { rooms = newRooms }
+
+                newModel =
+                    { model | constants = newConstants }
+            in
+            ( newModel, saveConstants (encodeConstants newConstants) )
+
+        ResetRoomsToDefault ->
+            ( { model | constants = defaultConstants }
+            , saveConstants (encodeConstants defaultConstants)
+            )
+
 
 focusElement : String -> Cmd Msg
 focusElement id =
@@ -1078,7 +1174,7 @@ viewMedicationFormsPage model =
         , case getActiveForm model of
             Just form ->
                 div []
-                    [ viewFormInfo form
+                    [ viewFormInfo model.constants.rooms form
                     , viewScheduleTable model form
                     , viewExportButtons
                     ]
@@ -1169,7 +1265,7 @@ viewRoomBreakdownPage model =
             groupFormsByRoom model.forms
 
         roomOrder =
-            List.filter (\r -> not (String.isEmpty r)) defaultRoomOptions
+            model.constants.rooms
 
         sortedRooms =
             List.filterMap
@@ -1292,23 +1388,44 @@ viewConstantsPage model =
         [ h2 [] [ text "Settings" ]
         , if model.isAdmin then
             div []
-                [ p [ class "settings-info" ] [ text "Room options are currently predefined. Future versions will allow editing." ]
-                , h3 [] [ text "Room Options" ]
+                [ h3 [] [ text "Room Options" ]
+                , p [ class "settings-info" ] [ text "Add or remove rooms from the dropdown list." ]
                 , ul [ class "constants-list" ]
-                    (List.map
-                        (\room ->
-                            li [ class "constants-item" ]
-                                [ text
-                                    (if String.isEmpty room then
-                                        "(empty - Select Room)"
-
-                                     else
-                                        room
-                                    )
+                    (List.indexedMap
+                        (\index room ->
+                            li [ class "constants-item editable" ]
+                                [ span [ class "room-name" ] [ text room ]
+                                , button
+                                    [ class "btn btn-small btn-danger remove-room-btn"
+                                    , onClick (RemoveRoom index)
+                                    ]
+                                    [ text "Remove" ]
                                 ]
                         )
-                        defaultRoomOptions
+                        model.constants.rooms
                     )
+                , div [ class "add-room-form" ]
+                    [ input
+                        [ type_ "text"
+                        , placeholder "New room name"
+                        , Html.Attributes.value model.newRoomInput
+                        , onInput UpdateNewRoomInput
+                        , onEnter AddRoom
+                        ]
+                        []
+                    , button
+                        [ class "btn btn-primary"
+                        , onClick AddRoom
+                        ]
+                        [ text "Add Room" ]
+                    ]
+                , div [ class "reset-section" ]
+                    [ button
+                        [ class "btn btn-secondary"
+                        , onClick ResetRoomsToDefault
+                        ]
+                        [ text "Reset to Defaults" ]
+                    ]
                 ]
 
           else
@@ -1455,12 +1572,12 @@ viewTab activeIndex canDelete index form =
         ]
 
 
-viewFormInfo : MedicationForm -> Html Msg
-viewFormInfo form =
+viewFormInfo : List String -> MedicationForm -> Html Msg
+viewFormInfo roomOptions form =
     div [ class "card form-info" ]
         [ div [ class "form-grid" ]
             [ viewEditableField "Cat Name" form.catName CatName
-            , viewRoomDropdown form.room
+            , viewRoomDropdown roomOptions form.room
             , viewEditableField "Diagnosis" form.diagnosis Diagnosis
             , viewEditableField "Treatment" form.treatment Treatment
             , viewEditableField "CARE Contact" form.careContact CareContact
@@ -1470,8 +1587,12 @@ viewFormInfo form =
         ]
 
 
-viewRoomDropdown : String -> Html Msg
-viewRoomDropdown currentRoom =
+viewRoomDropdown : List String -> String -> Html Msg
+viewRoomDropdown roomOptions currentRoom =
+    let
+        options =
+            "" :: roomOptions
+    in
     div [ class "field" ]
         [ Html.label [] [ text "Room" ]
         , Html.select
@@ -1493,7 +1614,7 @@ viewRoomDropdown currentRoom =
                             )
                         ]
                 )
-                defaultRoomOptions
+                options
             )
         ]
 
