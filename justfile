@@ -98,9 +98,13 @@ systemd-install:
 
     echo "Installing systemd service: ${SERVICE_NAME}"
 
-    # Build Elm app first
-    echo "Building Elm app..."
-    (cd "${REPO_DIR}" && just build-release)
+    # Build Elm app first (skip if already built)
+    if [[ ! -f "${REPO_DIR}/static/elm.js" ]]; then
+        echo "Building Elm app..."
+        (cd "${REPO_DIR}" && just build-release)
+    else
+        echo "Elm app already built, skipping build."
+    fi
 
     # Copy and template service file
     sed -e "s|USER_PLACEHOLDER|${USER}|g" \
