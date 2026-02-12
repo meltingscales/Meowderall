@@ -75,3 +75,85 @@ gcp-logs:
 # Get Cloud Run service URL
 gcp-url:
     gcloud run services describe {{SERVICE_NAME}} --region {{GCP_REGION}} --project {{GCP_PROJECT}} --format 'value(status.url)'
+
+# Systemd Service Setup (for GCP VM)
+# ====================================
+
+# Install as systemd service running on port 3001
+# Run with sudo
+systemd-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: This recipe must be run as root (use sudo)."
+        exit 1
+    fi
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SERVICE_NAME="meowderall"
+    PORT="${PORT:-3001}"
+    REPO_DIR="${REPO_DIR:-${SCRIPT_DIR}}"
+    USER="${SUDO_USER:-root}"
+
+    echo "Installing systemd service: ${SERVICE_NAME}"
+
+    # Build Elm app first
+    echo "Building Elm app..."
+    cd "${REPO_DIR}"
+    just build-release
+
+    # Copy and template service file
+    sed -e "s|USER_PLACEHOLDER|${USER}|g" \
+        -e "s|REPO_DIR_PLACEHOLDER|${REPO_DIR}|g" \
+        "${SCRIPT_DIR}/systemd/${SERVICE_NAME}.service" \
+        > /etc/systemd/system/${SERVICE_NAME}.service
+
+    # Reload systemd and enable service
+    systemctl daemon-reload
+    systemctl enable ${SERVICE_NAME}
+    systemctl restart ${SERVICE_NAME}
+
+    echo "Service installed and started on port ${PORT}!"
+    echo ""
+    echo "Commands:"
+    echo "  sudo systemctl status ${SERVICE_NAME}"
+    echo "  sudo systemctl restart ${SERVICE_NAME}"
+    echo "  sudo journalctl -u ${SERVICE_NAME} -f"
+
+# Uninstall systemd service
+# Run with sudo
+systemd-uninstall:
+    #!/usr/bin/env bash
+    SERVICE_NAME="meowderall"
+
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: This recipe must be run as root (use sudo)."
+        exit 1
+    fi
+
+    echo "Stopping and disabling ${SERVICE_NAME}..."
+    systemctl stop ${SERVICE_NAME} 2>/dev/null || true
+    systemctl disable ${SERVICE_NAME} 2>/dev/null || true
+    rm -f /etc/systemd/system/${SERVICE_NAME}.service
+    systemctl daemon-reload
+    echo "Service uninstalled."
+
+# Show service status
+systemd-status:
+    #!/usr/bin/env bash
+    SERVICE_NAME="${SERVICE_NAME:-meowderall}"
+    systemctl status ${SERVICE_NAME}
+
+# View service logs
+systemd-logs:
+    #!/usr/bin/env bash
+    SERVICE_NAME="${SERVICE_NAME:-meowderall}"
+    journalctl -u ${SERVICE_NAME} -f
+
+# Restart the service
+systemd-restart:
+    #!/usr/bin/env bash
+    SERVICE_NAME="${SERVICE_NAME:-meowderall}"
+    systemctl restart ${SERVICE_NAME}
+    systemctl status ${SERVICE_NAME}

@@ -1,0 +1,14 @@
+[Unit]
+Description=Meowderall Web Service (Elm SPA)
+After=network.target
+
+[Service]
+Type=simple
+User=USER_PLACEHOLDER
+WorkingDirectory=REPO_DIR_PLACEHOLDER/static
+ExecStart=/usr/bin/python3 -m http.server 3001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
