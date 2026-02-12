@@ -100,8 +100,7 @@ systemd-install:
 
     # Build Elm app first
     echo "Building Elm app..."
-    cd "${REPO_DIR}"
-    just build-release
+    (cd "${REPO_DIR}" && just build-release)
 
     # Copy and template service file
     sed -e "s|USER_PLACEHOLDER|${USER}|g" \
