@@ -90,10 +90,10 @@ systemd-install:
         exit 1
     fi
 
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # Use current directory as REPO_DIR (user should run from repo root)
+    REPO_DIR="$(pwd)"
     SERVICE_NAME="meowderall"
     PORT="${PORT:-3001}"
-    REPO_DIR="${REPO_DIR:-${SCRIPT_DIR}}"
     USER="${SUDO_USER:-root}"
 
     echo "Installing systemd service: ${SERVICE_NAME}"
@@ -109,7 +109,7 @@ systemd-install:
     # Copy and template service file
     sed -e "s|USER_PLACEHOLDER|${USER}|g" \
         -e "s|REPO_DIR_PLACEHOLDER|${REPO_DIR}|g" \
-        "${SCRIPT_DIR}/systemd/${SERVICE_NAME}.service" \
+        "${REPO_DIR}/systemd/${SERVICE_NAME}.service" \
         > /etc/systemd/system/${SERVICE_NAME}.service
 
     # Reload systemd and enable service
