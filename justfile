@@ -23,6 +23,13 @@ fmt:
 clean:
     rm -f static/elm.js
 
+# Clear npm cache (frees disk space)
+clean-cache:
+    #!/usr/bin/env bash
+    echo "Clearing npm cache..."
+    npm cache clean --force
+    echo "Cache cleared."
+
 # Docker operations
 # ================
 
